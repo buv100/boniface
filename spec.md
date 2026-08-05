@@ -160,6 +160,23 @@ flowchart LR
 
 **קונפליקטים:** Last-write-wins עם חותמת זמן שרת; פעולות קריטיות (סגירת משמרת, טיפים) לא נמחקות בשקט — מוצגת התראה אם נכשל הסנכרון.
 
+```mermaid
+flowchart TD
+  UserAction[פעולת_משתמש_באפליקציה]
+  UserAction --> WriteLocal[כתיבה_ל_AsyncStorage]
+  WriteLocal --> Queue[הוספה_לתור_סנכרון]
+  Queue --> Net{יש_רשת}
+  Net -->|לא| Wait[ממתין_לסנכרון_ב_UI]
+  Net -->|כן| PushAPI[POST_PATCH_לשרת]
+  PushAPI --> Ok{הצלחה}
+  Ok -->|כן| Ack[סימון_סונכרן]
+  Ok -->|לא| Retry[ניסיון_חוזר_אקספוננציאלי]
+  Retry --> Net
+  Pull[פתיחת_אפליקציה_מחוברת] --> Hydrate[משיכה_מהשרת]
+  Hydrate --> Merge[מיזוג_לפי_חותמת_זמן]
+  Merge --> WriteLocal
+```
+
 ---
 
 ## 6. מודל נתונים
@@ -219,6 +236,23 @@ erDiagram
 1. UP שולח קישור WhatsApp/Email עם קוד אישי.
 2. העובד מוריד מהחנות → מזין קוד → מגדיר פרופיל/PIN → דאשבורד עובד.
 3. שחזור גישה רק דרך UP (איפוס קוד/PIN).
+
+```mermaid
+flowchart TD
+  UP_Reg[UP_נרשם_טלפון_ו_PIN]
+  UP_Reg --> Token[Bearer_Session]
+  Token --> Invite[UP_יוצר_קוד_הזמנה]
+  Invite --> Share[שליחה_WhatsApp_או_Email]
+  Share --> Store[עובד_מוריד_מ_AppStore_או_Play]
+  Store --> EnterCode[הזנת_קוד_באפליקציה]
+  EnterCode --> Valid{קוד_תקף}
+  Valid -->|לא| Reject[שגיאה_וניסיון_חוזר]
+  Valid -->|כן| Profile[הגדרת_פרופיל_ו_PIN]
+  Profile --> EmpDash[דאשבורד_עובד]
+  UP_Forgot[שחזור_UP] --> EmailQ[אימייל_ושאלת_אבטחה]
+  EmailQ --> ResetPIN[איפוס_PIN]
+  Emp_Forgot[שחזור_עובד] --> ViaUP[איפוס_רק_דרך_UP]
+```
 
 ### 7.3 התנהגות מנוי שפג
 
