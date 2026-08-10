@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -115,7 +116,29 @@ export default function EmployeeHomeScreen() {
         contentContainerStyle={{ paddingTop: topPad + 12, paddingBottom: bottomPad, paddingHorizontal: 16 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
       >
-        <Text style={[styles.title, { color: colors.foreground }]}>{tr.employee.homeTitle}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <Text style={[styles.title, { color: colors.foreground, flex: 1 }]}>{tr.employee.homeTitle}</Text>
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.navigate("/assistant" as any);
+            }}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(245,158,11,0.15)",
+              borderWidth: 1,
+              borderColor: "rgba(245,158,11,0.35)",
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={tr.more.assistantItem}
+          >
+            <Feather name="cpu" size={18} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
         <Text style={[styles.sub, { color: colors.mutedForeground }]}>{tr.employee.homeSub}</Text>
         <Text style={[styles.hint, { color: colors.mutedForeground }]}>{tr.employee.laborHint}</Text>
 

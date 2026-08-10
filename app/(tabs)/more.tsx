@@ -53,6 +53,15 @@ export default function MoreScreen() {
 
   const menuItems = [
     {
+      id: "assistant",
+      label: tr.more.assistantItem,
+      sub: tr.more.assistantDesc,
+      icon: "cpu",
+      iconColor: "#F59E0B",
+      soon: false,
+      onPress: () => { Haptics.selectionAsync(); router.navigate("/assistant" as any); },
+    },
+    {
       id: "search",
       label: tr.more.searchItem,
       sub: tr.more.searchDesc,

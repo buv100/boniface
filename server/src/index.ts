@@ -5,6 +5,7 @@ import express from "express";
 
 import { ensureSchema } from "./db";
 import authRoutes from "./routes/auth";
+import assistantRoutes from "./routes/assistant";
 import dayEntriesRoutes from "./routes/dayEntries";
 import employeesRoutes from "./routes/employees";
 import stockRoutes from "./routes/stock";
@@ -24,6 +25,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/assistant", assistantRoutes);
 app.use("/api/employees", employeesRoutes);
 app.use("/api/day-entries", dayEntriesRoutes);
 app.use("/api/venue", venueRoutes);

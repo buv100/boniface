@@ -231,6 +231,8 @@ const t = {
       cardsDesc: "D&D-style функции",
       searchItem: "Поиск",
       searchDesc: "Сотрудники, склад, история",
+      assistantItem: "AI-помощник",
+      assistantDesc: "Подсказки и переход к экранам",
       langSection: "ЯЗЫК",
       accountSection: "АККАУНТ",
       loginBtn: "Войти / Зарегистрироваться",
@@ -755,6 +757,24 @@ const t = {
       s15: { name: "Лёд", unit: "кг" },
       s16: { name: "Салфетки", unit: "шт." },
     },
+    assistant: {
+      title: "AI-помощник",
+      sub: "Спроси что угодно про Boniface",
+      welcome:
+        "Привет! Я помогу разобраться в приложении: смены, чаевые, склад, стоп-лист и команда. Могу сразу открыть нужный экран — просто скажи, куда идти.",
+      placeholder: "Напиши вопрос или «открой склад»…",
+      send: "Отправить",
+      tryAsking: "Попробуй спросить:",
+      emptyReply: "Готово.",
+      errorNetwork: "Не удалось связаться с помощником. Запусти API (`npm run api`) и проверь интернет.",
+      errorGroq: "Помощник временно недоступен (Groq). Проверь GROQ_API_KEY в .env сервера.",
+      suggestions: {
+        tip1: "Как начать смену?",
+        tip2: "Открой склад",
+        tip3: "Как делить чаевые?",
+        tip4: "Покажи расписание",
+      },
+    },
   },
 
   en: {
@@ -987,6 +1007,8 @@ const t = {
       cardsDesc: "D&D-style features",
       searchItem: "Search",
       searchDesc: "Employees, stock, history",
+      assistantItem: "AI assistant",
+      assistantDesc: "Tips and jump to any screen",
       langSection: "LANGUAGE",
       accountSection: "ACCOUNT",
       loginBtn: "Sign in / Register",
@@ -1511,6 +1533,24 @@ const t = {
       s15: { name: "Ice", unit: "kg" },
       s16: { name: "Napkins", unit: "pcs" },
     },
+    assistant: {
+      title: "AI assistant",
+      sub: "Ask anything about Boniface",
+      welcome:
+        "Hi! I can explain shifts, tips, stock, stop-list and team — and open the right screen for you. Just say where you want to go.",
+      placeholder: "Ask a question or say “open stock”…",
+      send: "Send",
+      tryAsking: "Try asking:",
+      emptyReply: "Done.",
+      errorNetwork: "Couldn’t reach the assistant. Start the API (`npm run api`) and check your connection.",
+      errorGroq: "Assistant unavailable (Groq). Check GROQ_API_KEY in the server .env.",
+      suggestions: {
+        tip1: "How do I start a shift?",
+        tip2: "Open the bar stock",
+        tip3: "How do tip splits work?",
+        tip4: "Show the schedule",
+      },
+    },
   },
 
   he: {
@@ -1743,6 +1783,8 @@ const t = {
       cardsDesc: "תכונות בסגנון D&D",
       searchItem: "חיפוש",
       searchDesc: "עובדים, מלאי, היסטוריה",
+      assistantItem: "עוזר AI",
+      assistantDesc: "עצות ומעבר למסכים באפליקציה",
       langSection: "שפה",
       accountSection: "חשבון",
       loginBtn: "כניסה / הרשמה",
@@ -2266,6 +2308,24 @@ const t = {
       s14: { name: "לימון", unit: "יח׳" },
       s15: { name: "קרח", unit: "ק״ג" },
       s16: { name: "מפיות", unit: "יח׳" },
+    },
+    assistant: {
+      title: "עוזר AI",
+      sub: "שאלו כל דבר על Boniface",
+      welcome:
+        "היי! אני כאן לעזור להבין את האפליקציה — משמרות, טיפים, מלאי, סטופ-ליסט וצוות. אפשר גם לבקש ממני לפתוח מסך: למשל «פתח את המלאי».",
+      placeholder: "שאלה או «פתח לוח זמנים»…",
+      send: "שלח",
+      tryAsking: "נסו לשאול:",
+      emptyReply: "מוכן.",
+      errorNetwork: "לא הצלחתי לדבר עם העוזר. הריצו את ה-API (`npm run api`) ובדקו חיבור.",
+      errorGroq: "העוזר לא זמין כרגע (Groq). בדקו GROQ_API_KEY בקובץ .env של השרת.",
+      suggestions: {
+        tip1: "איך מתחילים משמרת?",
+        tip2: "פתח את המלאי",
+        tip3: "איך מחלקים טיפים?",
+        tip4: "הראה את לוח הזמנים",
+      },
     },
   },
 };

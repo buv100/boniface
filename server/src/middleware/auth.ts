@@ -152,6 +152,37 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
 }
 
+/** Attach auth if present; never block anonymous assistant chats. */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) {
+    next();
+    return;
+  }
+  const token = header.slice(7);
+  try {
+    const payload = jwt.verify(token, getJwtSecret()) as TokenPayload;
+    const row = db.select().from(sessions).where(eq(sessions.id, payload.sid)).get();
+    if (
+      row &&
+      row.tokenHash === hashToken(token) &&
+      new Date(row.expiresAt).getTime() >= Date.now()
+    ) {
+      req.token = token;
+      req.auth = {
+        sessionId: payload.sid,
+        venueId: payload.venueId,
+        role: payload.role,
+        managerId: payload.managerId,
+        employeeId: payload.employeeId,
+      };
+    }
+  } catch {
+    // ignore invalid token for optional auth
+  }
+  next();
+}
+
 export function requireManager(req: Request, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
     if (req.auth?.role !== "manager" || !req.auth.managerId) {

@@ -12,6 +12,12 @@
 - **איפה שונה באפליקציה:** מסך / מודל / זרימה למשתמש (או «אין — מסמכים בלבד»)
 ```
 
+### 2026-08-10 — עוזר AI (Groq) עם ניווט למסכים
+- **מה השתנה:** מסך צ׳אט `assistant` מול `POST /api/assistant/chat` (Groq); תשובות בעברית/רוסית/אנגלית; עצות שימוש + שורת `NAVIGATE:` שמעבירה למסך מותר מרשימה לבנה; כניסות מ«עוד», כותרת הבית, ומסך עובד; `optionalAuth`; מפתח רק ב-`.env` (לא בגיט).
+- **למה:** לתת מדריך אינטראקטיבי באפליקציה שמסביר וגם מנווט לפיצ׳ר המבוקש.
+- **איפה שונה בקוד:** `app/assistant.tsx`, `lib/assistantNav.ts`, `server/src/routes/assistant.ts`, `server/src/index.ts`, `server/src/middleware/auth.ts`, `app/_layout.tsx`, `app/(tabs)/more.tsx`, `app/(tabs)/index.tsx`, `app/employee/index.tsx`, `lib/api.ts`, `lib/translations.ts`, `.env.example`, `change.md`
+- **איפה שונה באפליקציה:** מסך עוזר AI; כפתור זהב בכותרת הבית ובמצב עובד; פריט תפריט בעוד
+
 ### 2026-08-10 — Inventory P2 lite, subCategory, Tips keyboard, EAS/README
 - **מה השתנה:** `InventorySheet` עם סליידר צללית בקבוק (0–100%) ל-spirits/wine, שמירה ב-`updateStockItem`, שיתוף CSV/טקסט; שדה אופציונלי `subCategory` (display|speedbar|storage|custom) + שבבי סינון בבר; `TipsEntryModal` עם `KeyboardAwareScrollView` (fallback ל-web); `eas.json` עם פרופילי preview/production ל-iOS+Android; `README.md` להרצה, API, TestFlight/Play וקישורי privacy/terms; הערת IAP לפני go-live מונטיזציה.
 - **למה:** לסגור חלקי roadmap בעלי ערך גבוה בלי לשבור offline-first ולשמור typecheck ירוק.

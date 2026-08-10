@@ -160,6 +160,14 @@ export default function DashboardScreen() {
 
           <View style={styles.headerRight}>
             <TouchableOpacity
+              style={[styles.alertBtn, { backgroundColor: "rgba(245,158,11,0.15)", borderColor: "rgba(245,158,11,0.35)" }]}
+              onPress={() => router.navigate("/assistant" as any)}
+              accessibilityRole="button"
+              accessibilityLabel={tr.more.assistantItem}
+            >
+              <Feather name="cpu" size={14} color="#F59E0B" />
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.alertBtn, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}
               onPress={() => router.navigate("/search" as any)}
             >

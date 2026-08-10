@@ -32,7 +32,9 @@ function RoleGate({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
     const root = String(segments[0] ?? "");
     const inEmployee = root === "employee";
-    if (isLoggedIn && isEmployee && !inEmployee) {
+    // Shared screens both roles can open (assistant, search, legal, account)
+    const sharedRoots = new Set(["assistant", "search", "privacy", "terms", "account"]);
+    if (isLoggedIn && isEmployee && !inEmployee && !sharedRoots.has(root)) {
       router.replace("/employee" as any);
     } else if (isLoggedIn && isManager && inEmployee) {
       router.replace("/");
@@ -54,6 +56,8 @@ function RootLayoutNav() {
         <Stack.Screen name="terms" options={{ headerShown: false }} />
         <Stack.Screen name="briefing" options={{ headerShown: false }} />
         <Stack.Screen name="schedule" options={{ headerShown: false }} />
+        <Stack.Screen name="search" options={{ headerShown: false }} />
+        <Stack.Screen name="assistant" options={{ headerShown: false }} />
       </Stack>
     </RoleGate>
   );

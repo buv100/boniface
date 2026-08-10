@@ -49,7 +49,9 @@ export async function apiCall<T>(path: string, opts: ApiOptions = {}): Promise<T
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-    throw new Error(err.error ?? `HTTP ${res.status}`);
+    const code = typeof err.code === "string" ? err.code : "";
+    const msg = err.error ?? `HTTP ${res.status}`;
+    throw new Error(code ? `${code}: ${msg}` : msg);
   }
 
   if (res.status === 204) return undefined as T;
