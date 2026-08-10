@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
-import { apiCall } from "@/lib/api";
+import { employeePortalService } from "@/lib/services/employeePortalService";
 
 interface ShiftClaim {
   id: string;
@@ -59,7 +59,11 @@ export default function EmployeeHomeScreen() {
       to.setDate(to.getDate() + 21);
       const fmt = (d: Date) =>
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const data = await apiCall<ShiftSlot[]>(`/shift-slots?from=${fmt(from)}&to=${fmt(to)}`, { token });
+      const data = (await employeePortalService.getShiftSlots(
+        token,
+        fmt(from),
+        fmt(to)
+      )) as ShiftSlot[];
       setSlots(data);
     } catch {
       // offline grace
@@ -78,11 +82,7 @@ export default function EmployeeHomeScreen() {
     if (!token || !myId) return;
     setBusyId(slot.id);
     try {
-      await apiCall(`/shift-slots/${slot.id}/claim`, {
-        method: "POST",
-        token,
-        body: { employeeId: myId },
-      });
+      await employeePortalService.claimSlot(token, slot.id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await load();
     } catch (e: any) {
@@ -97,7 +97,7 @@ export default function EmployeeHomeScreen() {
     if (!token) return;
     setBusyId(claimId);
     try {
-      await apiCall(`/shift-claims/${claimId}`, { method: "DELETE", token });
+      await employeePortalService.cancelClaim(token, claimId);
       await load();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {

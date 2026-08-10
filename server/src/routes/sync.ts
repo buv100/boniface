@@ -63,8 +63,8 @@ function mapSlot(row: typeof shiftSlots.$inferSelect, claims: (typeof shiftClaim
   };
 }
 
-// —— Bulk sync pull ——
-router.get("/pull", requireAuth, (req, res) => {
+// —— Bulk sync pull (managers only — employees use /api/employee/*) ——
+router.get("/pull", requireManager, (req, res) => {
   const venueId = req.auth!.venueId;
   res.json({
     employees: db

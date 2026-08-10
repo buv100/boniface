@@ -1,3 +1,10 @@
 const { getDefaultConfig } = require("expo/metro-config");
 
-module.exports = getDefaultConfig(__dirname);
+const config = getDefaultConfig(__dirname);
+
+// Prefer Hermes-oriented transforms so release bytecode accepts the bundle.
+if (config.transformer) {
+  config.transformer.unstable_transformProfile = "hermes-stable";
+}
+
+module.exports = config;

@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 
-import { apiCall } from "@/lib/api";
+import { inventoryService } from "@/lib/services/inventoryService";
 import { generateId, todayString } from "./AppContext";
 import { useAuth } from "./AuthContext";
 
@@ -259,7 +259,7 @@ function mapRemoteChecklist(r: Checklist): Checklist {
 }
 
 export function BonifaceProvider({ children }: { children: React.ReactNode }) {
-  const { token, isLoading: authLoading } = useAuth();
+  const { token, isLoading: authLoading, isManager } = useAuth();
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [shiftState, setShiftState] = useState<ShiftState>({
@@ -330,59 +330,48 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
     load();
   }, [authLoading]);
 
-  // Hydrate from API on login / session restore
+  // Hydrate from API on login / session restore (managers only)
   useEffect(() => {
     if (authLoading || isLoading) return;
     if (prevTokenRef.current === token) return;
     prevTokenRef.current = token;
-    if (!token) return;
+    if (!token || !isManager) return;
 
     const hydrate = async () => {
       setIsSyncing(true);
       hydrateSkipRef.current = true;
       try {
-        const [remoteStock, remoteStop, remoteWriteOffs, remoteChecklists] =
-          await Promise.all([
-            apiCall<StockItem[]>("/stock", { token }),
-            apiCall<StopListItem[]>("/stop-list", { token }),
-            apiCall<WriteOff[]>("/write-offs", { token }),
-            apiCall<Checklist[]>("/checklists", { token }),
-          ]);
-
-        const stock = (remoteStock ?? []).map(mapRemoteStock);
-        const stop = (remoteStop ?? []).map(mapRemoteStop);
-        const offs = (remoteWriteOffs ?? []).map(mapRemoteWriteOff);
-        const cls = (remoteChecklists ?? []).map(mapRemoteChecklist);
-
-        const [localStockRaw, localClRaw] = await Promise.all([
-          AsyncStorage.getItem(STOCK_KEY),
-          AsyncStorage.getItem(CHECKLISTS_KEY),
-        ]);
-        const localStock: StockItem[] = localStockRaw
-          ? JSON.parse(localStockRaw)
-          : DEFAULT_STOCK;
-        const localCl: Checklist[] = localClRaw
-          ? JSON.parse(localClRaw)
-          : DEFAULT_CHECKLISTS;
+        const remote = await inventoryService.pullFromCloud(token);
+        const stock = (remote.stock ?? []).map(mapRemoteStock);
+        const stop = (remote.stop ?? []).map(mapRemoteStop);
+        const offs = (remote.writeOffs ?? []).map(mapRemoteWriteOff);
+        const cls = (remote.checklists ?? []).map(mapRemoteChecklist);
 
         if (stock.length > 0) {
           setStockItems(stock);
-          await AsyncStorage.setItem(STOCK_KEY, JSON.stringify(stock));
-        } else if (localStock.length > 0) {
-          // Seed cloud from local cache when venue has no stock yet
-          apiCall("/stock", { method: "PUT", token, body: localStock }).catch(() => {});
+        } else {
+          const localStockRaw = await AsyncStorage.getItem(STOCK_KEY);
+          const localStock: StockItem[] = localStockRaw
+            ? JSON.parse(localStockRaw)
+            : DEFAULT_STOCK;
+          if (localStock.length > 0) {
+            await inventoryService.saveStock(token, localStock, true);
+          }
         }
 
         setStopList(stop);
-        await AsyncStorage.setItem(STOPLIST_KEY, JSON.stringify(stop));
         setWriteOffs(offs);
-        await AsyncStorage.setItem(WRITEOFFS_KEY, JSON.stringify(offs));
 
         if (cls.length > 0) {
           setChecklists(cls);
-          await AsyncStorage.setItem(CHECKLISTS_KEY, JSON.stringify(cls));
-        } else if (localCl.length > 0) {
-          apiCall("/checklists", { method: "PUT", token, body: localCl }).catch(() => {});
+        } else {
+          const localClRaw = await AsyncStorage.getItem(CHECKLISTS_KEY);
+          const localCl: Checklist[] = localClRaw
+            ? JSON.parse(localClRaw)
+            : DEFAULT_CHECKLISTS;
+          if (localCl.length > 0) {
+            await inventoryService.saveChecklists(token, localCl, true);
+          }
         }
       } catch {
         // Offline / API down — keep AsyncStorage cache
@@ -394,22 +383,24 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
       }
     };
     hydrate();
-  }, [token, authLoading, isLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on token/manager change
+  }, [token, authLoading, isLoading, isManager]);
 
   const scheduleCloudPut = useCallback(
     (key: "stock" | "stop-list" | "write-offs" | "checklists", body: unknown) => {
-      if (!tokenRef.current || hydrateSkipRef.current) return;
+      if (!tokenRef.current || hydrateSkipRef.current || !isManager) return;
       const existing = syncTimers.current[key];
       if (existing) clearTimeout(existing);
       syncTimers.current[key] = setTimeout(() => {
         const t = tokenRef.current;
         if (!t) return;
-        apiCall(`/${key}`, { method: "PUT", token: t, body }).catch(() => {
-          // fail soft when offline
-        });
+        if (key === "stock") inventoryService.saveStock(t, body as StockItem[], true);
+        else if (key === "stop-list") inventoryService.saveStopList(t, body as StopListItem[], true);
+        else if (key === "write-offs") inventoryService.saveWriteOffs(t, body as WriteOff[], true);
+        else inventoryService.saveChecklists(t, body as Checklist[], true);
       }, SYNC_DEBOUNCE_MS);
     },
-    []
+    [isManager]
   );
 
   useEffect(() => {

@@ -1,5 +1,11 @@
 import { Router, type Request, type Response } from "express";
 
+import {
+  loadEmployeeAssistantContext,
+  loadVenueAssistantContext,
+  mergeAssistantContexts,
+  truncateContextJson,
+} from "../assistant/context";
 import { optionalAuth } from "../middleware/auth";
 
 const router = Router();
@@ -22,10 +28,20 @@ What Boniface does:
 - Feature Cards / Premium UI (real IAP not live yet)
 - Languages: he / ru / en
 
+LIVE DATA:
+You receive a JSON block "USER_VENUE_DATA" with THIS user's live venue data (stock, tips, team, stop-list, write-offs, shift, checklists, happy hour).
+- Treat USER_VENUE_DATA as ground truth for calculations and factual answers about THEIR bar.
+- When asked about inventory (e.g. "how much vodka do I have?"), find ALL matching stock rows by name/category (match Hebrew/Russian/English synonyms: vodka/וודקה/водка, whiskey/וויסקי/виски, gin/ג'ין/джин, wine/יין/вино, beer/בירה/пиво, etc.), list each match with quantity+unit, then SUM totals (group by unit if units differ).
+- Do the same for tips totals, low stock, stop-list, write-offs, employees on shift, checklist progress, etc.
+- Show your math briefly (items + sum). Prefer numbers from the JSON — never invent stock quantities.
+- If data is missing/empty, say you don't see it in the current venue data and suggest opening the relevant screen.
+- Never reveal PINs, security answers, API keys, or raw auth tokens. Phone numbers: only last 4 digits if ever needed.
+
 Your jobs:
 1) Answer free questions about how to use the app.
-2) Give practical bar-ops advice when asked (tips splitting, stop-list, stock).
-3) When the user wants to GO somewhere or DO something in the app, include exactly one navigation line at the END of your reply:
+2) Give practical bar-ops advice when asked.
+3) Answer factual questions using USER_VENUE_DATA with accurate sums/filters.
+4) When the user wants to GO somewhere or DO something in the app, include exactly one navigation line at the END of your reply:
 NAVIGATE: <route>
 
 Allowed routes ONLY (pick the best match):
@@ -54,9 +70,8 @@ Rules:
 - Never invent routes outside the list.
 - Only add NAVIGATE when the user clearly wants to open a screen or start a flow.
 - Map stock/inventory/מלאי/סטופ to /bar — never /more for those.
-- For pure advice/chat, do NOT add NAVIGATE.
-- Keep answers short and actionable (2–8 sentences unless asked for detail).
-- Never ask for or reveal API keys, PINs, or secrets.
+- For pure advice/chat or data answers, do NOT add NAVIGATE unless they also ask to open a screen.
+- Keep answers short and actionable (2–10 sentences unless asked for detail).
 - Do not claim payments/IAP work; say Premium billing is not connected yet if asked.`;
 
 type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
@@ -94,6 +109,29 @@ router.post("/chat", optionalAuth, async (req: Request, res: Response) => {
     return;
   }
 
+  let serverCtx: unknown = null;
+  if (req.auth?.venueId) {
+    try {
+      if (req.auth.role === "employee" && req.auth.employeeId) {
+        serverCtx = loadEmployeeAssistantContext(req.auth.venueId, req.auth.employeeId);
+      } else {
+        serverCtx = loadVenueAssistantContext(req.auth.venueId, req.auth.role);
+      }
+    } catch (e) {
+      console.warn("assistant server context failed", e);
+    }
+  }
+
+  const clientCtx = req.body?.context ?? null;
+  const merged = mergeAssistantContexts(clientCtx, serverCtx);
+  const contextJson = truncateContextJson(merged);
+
+  const systemWithData = `${SYSTEM_PROMPT}
+
+USER_VENUE_DATA (JSON, live):
+${contextJson || "{}"}
+`;
+
   const model = process.env.GROQ_MODEL?.trim() || "llama-3.3-70b-versatile";
 
   try {
@@ -105,9 +143,9 @@ router.post("/chat", optionalAuth, async (req: Request, res: Response) => {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.4,
-        max_tokens: 800,
-        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...cleaned],
+        temperature: 0.2,
+        max_tokens: 1200,
+        messages: [{ role: "system", content: systemWithData }, ...cleaned],
       }),
     });
 
@@ -135,6 +173,7 @@ router.post("/chat", optionalAuth, async (req: Request, res: Response) => {
       reply: reply || content,
       navigate,
       role: req.auth?.role ?? null,
+      contextAttached: !!merged,
     });
   } catch (e) {
     console.error("assistant chat failed", e);

@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   createContext,
   useCallback,
@@ -7,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { apiCall } from "@/lib/api";
+import { teamTipsService } from "@/lib/services/teamTipsService";
 import { useAuth } from "./AuthContext";
 
 export const EMPLOYEE_ROLES = [
@@ -72,9 +71,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const EMPLOYEES_KEY = "@bar_tips_employees_v2";
-const ENTRIES_KEY = "@bar_tips_day_entries_v2";
-
 export const generateId = () =>
   Date.now().toString() + Math.random().toString(36).substr(2, 9);
 
@@ -128,7 +124,7 @@ function mapRemoteDayEntry(r: RemoteDayEntry): DayEntry {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const { token, isLoading: authLoading } = useAuth();
+  const { token, isLoading: authLoading, isManager } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [dayEntries, setDayEntries] = useState<DayEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -140,12 +136,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (authLoading) return;
     const load = async () => {
       try {
-        const [empData, entryData] = await Promise.all([
-          AsyncStorage.getItem(EMPLOYEES_KEY),
-          AsyncStorage.getItem(ENTRIES_KEY),
-        ]);
-        if (empData) setEmployees(JSON.parse(empData));
-        if (entryData) setDayEntries(JSON.parse(entryData));
+        const cached = await teamTipsService.hydrateFromCache();
+        if (cached.employees) setEmployees(cached.employees);
+        if (cached.dayEntries) setDayEntries(cached.dayEntries);
       } catch {
         // ignore
       } finally {
@@ -155,29 +148,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     load();
   }, [authLoading]);
 
-  // Sync from API when token changes (login / app resume with existing session)
+  // Sync from API when token changes (managers only)
   useEffect(() => {
     if (authLoading) return;
     if (prevTokenRef.current === token) return;
     prevTokenRef.current = token;
 
-    if (!token) return;
+    if (!token || !isManager) return;
 
     const sync = async () => {
       setIsSyncing(true);
       try {
-        const [remoteEmps, remoteEntries] = await Promise.all([
-          apiCall<RemoteEmployee[]>("/employees", { token }),
-          apiCall<RemoteDayEntry[]>("/day-entries", { token }),
-        ]);
-        const emps = remoteEmps.map(mapRemoteEmployee);
-        const entries = remoteEntries.map(mapRemoteDayEntry);
-        setEmployees(emps);
-        setDayEntries(entries);
-        await Promise.all([
-          AsyncStorage.setItem(EMPLOYEES_KEY, JSON.stringify(emps)),
-          AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(entries)),
-        ]);
+        const { employees: emps, dayEntries: entries } = await teamTipsService.pullFromCloud(token);
+        if (emps) setEmployees(emps.map(mapRemoteEmployee));
+        if (entries) setDayEntries(entries.map(mapRemoteDayEntry));
       } catch {
         // keep local state on network failure
       } finally {
@@ -185,47 +169,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
     sync();
-  }, [token, authLoading]);
+  }, [token, authLoading, isManager]);
 
   const saveEmployeesLocal = useCallback(async (data: Employee[]) => {
-    await AsyncStorage.setItem(EMPLOYEES_KEY, JSON.stringify(data));
+    await teamTipsService.saveEmployeesLocal(data);
   }, []);
 
   const saveEntriesLocal = useCallback(async (data: DayEntry[]) => {
-    await AsyncStorage.setItem(ENTRIES_KEY, JSON.stringify(data));
+    await teamTipsService.saveDayEntriesLocal(data);
   }, []);
 
   const addEmployee = useCallback(
     async (name: string, roles: string[] = [], phone?: string) => {
-      if (token) {
-        const remote = await apiCall<RemoteEmployee>("/employees", {
-          method: "POST",
-          token,
-          body: { name: name.trim(), roles, phone: phone ?? null },
-        });
-        const emp = mapRemoteEmployee(remote);
-        const updated = [...employees, emp];
-        setEmployees(updated);
-        await saveEmployeesLocal(updated);
-      } else {
-        const emp: Employee = { id: generateId(), name: name.trim(), roles, phone };
-        const updated = [...employees, emp];
-        setEmployees(updated);
-        await saveEmployeesLocal(updated);
-      }
+      const local: Employee = { id: generateId(), name: name.trim(), roles, phone };
+      const remote = await teamTipsService.createEmployee(token, local);
+      const emp =
+        remote && typeof remote === "object" && "id" in remote
+          ? mapRemoteEmployee(remote as RemoteEmployee)
+          : local;
+      const updated = [...employees, emp];
+      setEmployees(updated);
+      await saveEmployeesLocal(updated);
     },
     [token, employees, saveEmployeesLocal]
   );
 
   const updateEmployee = useCallback(
     async (id: string, name: string, roles?: string[], phone?: string) => {
-      if (token) {
-        await apiCall<RemoteEmployee>(`/employees/${id}`, {
-          method: "PATCH",
-          token,
-          body: { name: name.trim(), ...(roles !== undefined ? { roles } : {}), ...(phone !== undefined ? { phone } : {}) },
-        });
-      }
+      await teamTipsService.updateEmployee(token, id, {
+        name: name.trim(),
+        roles,
+        phone,
+      });
       const updated = employees.map((e) =>
         e.id === id ? { ...e, name: name.trim(), roles: roles ?? e.roles ?? [], phone: phone ?? e.phone } : e
       );
@@ -244,9 +219,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteEmployee = useCallback(
     async (id: string) => {
-      if (token) {
-        await apiCall(`/employees/${id}`, { method: "DELETE", token });
-      }
+      await teamTipsService.deleteEmployee(token, id);
       const updated = employees.filter((e) => e.id !== id);
       setEmployees(updated);
       await saveEmployeesLocal(updated);
@@ -256,27 +229,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const saveDayEntry = useCallback(
     async (entry: DayEntry) => {
-      if (token) {
-        await apiCall<RemoteDayEntry>(`/day-entries/${entry.id}`, {
-          method: "PUT",
-          token,
-          body: {
-            date: entry.date,
-            totalCash: entry.totalCash,
-            totalCard: entry.totalCard,
-            shifts: entry.shifts.map((s) => ({
-              id: s.id,
-              employeeId: s.employeeId,
-              employeeName: s.employeeName,
-              tipMode: s.tipMode,
-              startTime: s.startTime,
-              endTime: s.endTime,
-              cashPercent: s.cashPercent,
-              cardPercent: s.cardPercent,
-            })),
-          },
-        });
-      }
+      await teamTipsService.upsertDayEntry(token, entry);
       setDayEntries((prev) => {
         const idx = prev.findIndex((e) => e.id === entry.id);
         const updated =
@@ -292,9 +245,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteDayEntry = useCallback(
     async (id: string) => {
-      if (token) {
-        await apiCall(`/day-entries/${id}`, { method: "DELETE", token });
-      }
+      await teamTipsService.deleteDayEntry(token, id);
       setDayEntries((prev) => {
         const updated = prev.filter((e) => e.id !== id);
         saveEntriesLocal(updated);

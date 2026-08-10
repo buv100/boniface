@@ -1,0 +1,5 @@
+# Keep EAS mobile builds lean — API server is not part of the app binary
+server/
+server/**
+*.db
+.git/

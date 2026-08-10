@@ -1,10 +1,13 @@
-import { eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 
-import { db } from "../db";
-import { checklists, stockItems, stopList, writeOffs } from "../db/schema";
-import { nowIso, requireAuth } from "../middleware/auth";
+import { requireManager } from "../middleware/auth";
+import {
+  checklistsService,
+  stockService,
+  stopListService,
+  writeOffsService,
+} from "../services/inventoryService";
 
 const router = Router();
 
@@ -54,190 +57,57 @@ const checklistSchema = z.object({
   createdAt: z.string(),
 });
 
-function mapStock(row: typeof stockItems.$inferSelect) {
-  return {
-    id: row.id,
-    name: row.name,
-    category: row.category,
-    quantity: row.quantity,
-    unit: row.unit,
-    minQuantity: row.minQuantity,
-    purchasePrice: row.purchasePrice ?? undefined,
-    portionsPerUnit: row.portionsPerUnit ?? undefined,
-    sellingPrice: row.sellingPrice ?? undefined,
-    expiryDate: row.expiryDate ?? undefined,
-    subCategory: row.subCategory ?? undefined,
-  };
-}
-
-function mapStop(row: typeof stopList.$inferSelect) {
-  return {
-    id: row.id,
-    name: row.name,
-    reason: row.reason ?? undefined,
-    addedAt: row.addedAt,
-  };
-}
-
-function mapWriteOff(row: typeof writeOffs.$inferSelect) {
-  return {
-    id: row.id,
-    date: row.date,
-    itemId: row.itemId ?? undefined,
-    itemName: row.itemName,
-    quantity: row.quantity,
-    unit: row.unit,
-    reason: row.reason,
-    notes: row.notes ?? undefined,
-  };
-}
-
-function mapChecklist(row: typeof checklists.$inferSelect) {
-  return {
-    id: row.id,
-    title: row.title,
-    type: row.type,
-    items: JSON.parse(row.items || "[]"),
-    createdAt: row.createdAt,
-  };
-}
-
-router.get("/stock", requireAuth, (req, res) => {
-  const rows = db
-    .select()
-    .from(stockItems)
-    .where(eq(stockItems.venueId, req.auth!.venueId))
-    .all();
-  res.json(rows.map(mapStock));
+/** Managers: full stock. Employees use /api/employee/* */
+router.get("/stock", requireManager, (req, res) => {
+  res.json(stockService.list(req.auth!.venueId));
 });
 
-router.put("/stock", requireAuth, (req, res) => {
+router.put("/stock", requireManager, (req, res) => {
   const parsed = z.array(stockItemSchema).safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid stock payload" });
     return;
   }
-
-  const venueId = req.auth!.venueId;
-  const updatedAt = nowIso();
-  db.delete(stockItems).where(eq(stockItems.venueId, venueId)).run();
-  for (const item of parsed.data) {
-    db.insert(stockItems)
-      .values({
-        id: item.id,
-        venueId,
-        name: item.name,
-        category: item.category,
-        quantity: item.quantity,
-        unit: item.unit,
-        minQuantity: item.minQuantity,
-        purchasePrice: item.purchasePrice ?? null,
-        portionsPerUnit: item.portionsPerUnit ?? null,
-        sellingPrice: item.sellingPrice ?? null,
-        expiryDate: item.expiryDate ?? null,
-        subCategory: item.subCategory ?? null,
-        updatedAt,
-      })
-      .run();
-  }
-
-  const rows = db.select().from(stockItems).where(eq(stockItems.venueId, venueId)).all();
-  res.json(rows.map(mapStock));
+  res.json(stockService.replaceAll(req.auth!.venueId, parsed.data));
 });
 
-router.get("/stop-list", requireAuth, (req, res) => {
-  const rows = db.select().from(stopList).where(eq(stopList.venueId, req.auth!.venueId)).all();
-  res.json(rows.map(mapStop));
+router.get("/stop-list", requireManager, (req, res) => {
+  res.json(stopListService.list(req.auth!.venueId));
 });
 
-router.put("/stop-list", requireAuth, (req, res) => {
+router.put("/stop-list", requireManager, (req, res) => {
   const parsed = z.array(stopItemSchema).safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid stop-list payload" });
     return;
   }
-
-  const venueId = req.auth!.venueId;
-  db.delete(stopList).where(eq(stopList.venueId, venueId)).run();
-  for (const item of parsed.data) {
-    db.insert(stopList)
-      .values({
-        id: item.id,
-        venueId,
-        name: item.name,
-        reason: item.reason ?? null,
-        addedAt: item.addedAt,
-      })
-      .run();
-  }
-
-  const rows = db.select().from(stopList).where(eq(stopList.venueId, venueId)).all();
-  res.json(rows.map(mapStop));
+  res.json(stopListService.replaceAll(req.auth!.venueId, parsed.data));
 });
 
-router.get("/write-offs", requireAuth, (req, res) => {
-  const rows = db.select().from(writeOffs).where(eq(writeOffs.venueId, req.auth!.venueId)).all();
-  res.json(rows.map(mapWriteOff));
+router.get("/write-offs", requireManager, (req, res) => {
+  res.json(writeOffsService.list(req.auth!.venueId));
 });
 
-router.put("/write-offs", requireAuth, (req, res) => {
+router.put("/write-offs", requireManager, (req, res) => {
   const parsed = z.array(writeOffSchema).safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid write-offs payload" });
     return;
   }
-
-  const venueId = req.auth!.venueId;
-  db.delete(writeOffs).where(eq(writeOffs.venueId, venueId)).run();
-  for (const item of parsed.data) {
-    db.insert(writeOffs)
-      .values({
-        id: item.id,
-        venueId,
-        date: item.date,
-        itemId: item.itemId ?? null,
-        itemName: item.itemName,
-        quantity: item.quantity,
-        unit: item.unit,
-        reason: item.reason,
-        notes: item.notes ?? null,
-      })
-      .run();
-  }
-
-  const rows = db.select().from(writeOffs).where(eq(writeOffs.venueId, venueId)).all();
-  res.json(rows.map(mapWriteOff));
+  res.json(writeOffsService.replaceAll(req.auth!.venueId, parsed.data));
 });
 
-router.get("/checklists", requireAuth, (req, res) => {
-  const rows = db.select().from(checklists).where(eq(checklists.venueId, req.auth!.venueId)).all();
-  res.json(rows.map(mapChecklist));
+router.get("/checklists", requireManager, (req, res) => {
+  res.json(checklistsService.list(req.auth!.venueId));
 });
 
-router.put("/checklists", requireAuth, (req, res) => {
+router.put("/checklists", requireManager, (req, res) => {
   const parsed = z.array(checklistSchema).safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid checklists payload" });
     return;
   }
-
-  const venueId = req.auth!.venueId;
-  db.delete(checklists).where(eq(checklists.venueId, venueId)).run();
-  for (const item of parsed.data) {
-    db.insert(checklists)
-      .values({
-        id: item.id,
-        venueId,
-        title: item.title,
-        type: item.type,
-        items: JSON.stringify(item.items),
-        createdAt: item.createdAt,
-      })
-      .run();
-  }
-
-  const rows = db.select().from(checklists).where(eq(checklists.venueId, venueId)).all();
-  res.json(rows.map(mapChecklist));
+  res.json(checklistsService.replaceAll(req.auth!.venueId, parsed.data));
 });
 
 export default router;

@@ -193,6 +193,16 @@ export function requireManager(req: Request, res: Response, next: NextFunction):
   });
 }
 
+export function requireEmployee(req: Request, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    if (req.auth?.role !== "employee" || !req.auth.employeeId) {
+      res.status(403).json({ error: "Employee access required" });
+      return;
+    }
+    next();
+  });
+}
+
 /** Soft gate: managers with expired subscription cannot mutate critical cloud resources */
 export function requireActiveSubscription(req: Request, res: Response, next: NextFunction): void {
   requireManager(req, res, () => {

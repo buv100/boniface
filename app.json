@@ -1,13 +1,13 @@
 {
   "expo": {
     "name": "Boniface",
-    "slug": "mobile",
+    "slug": "nave",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
@@ -40,15 +40,15 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     },
     "extra": {
       "eas": {
-        "projectId": "935a5402-55fc-4a02-bf0d-6885db91e3fa"
+        "projectId": "2b48a973-20c9-4d25-833b-407770b06863"
       },
       "privacyUrl": "https://raw.githubusercontent.com/buv100/boniface/main/docs/privacy.html",
       "termsUrl": "https://raw.githubusercontent.com/buv100/boniface/main/docs/terms.html"
     },
-    "owner": "antonkaydin"
+    "owner": "nave123s-team"
   }
 }

@@ -14,6 +14,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AssistantFab } from "@/components/AssistantFab";
 import { AppProvider } from "@/context/AppContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { BonifaceProvider } from "@/context/BonifaceContext";
@@ -32,8 +33,8 @@ function RoleGate({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
     const root = String(segments[0] ?? "");
     const inEmployee = root === "employee";
-    // Shared screens both roles can open (assistant, search, legal, account)
-    const sharedRoots = new Set(["assistant", "search", "privacy", "terms", "account"]);
+    // Shared screens both roles can open
+    const sharedRoots = new Set(["assistant", "privacy", "terms", "account"]);
     if (isLoggedIn && isEmployee && !inEmployee && !sharedRoots.has(root)) {
       router.replace("/employee" as any);
     } else if (isLoggedIn && isManager && inEmployee) {
@@ -87,9 +88,10 @@ export default function RootLayout() {
             <AppProvider>
               <BonifaceProvider>
                 <LangProvider>
-                  <GestureHandlerRootView>
+                  <GestureHandlerRootView style={{ flex: 1 }}>
                     <KeyboardProvider>
                       <RootLayoutNav />
+                      <AssistantFab />
                     </KeyboardProvider>
                   </GestureHandlerRootView>
                 </LangProvider>

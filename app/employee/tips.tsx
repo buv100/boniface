@@ -1,36 +1,48 @@
-import React, { useMemo } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { calcDayResults, useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
+import {
+  employeePortalService,
+  type EmployeeTipRow,
+} from "@/lib/services/employeePortalService";
 
 export default function EmployeeTipsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tr } = useLang();
-  const { dayEntries } = useApp();
-  const { employee } = useAuth();
+  const { token } = useAuth();
+  const [rows, setRows] = useState<EmployeeTipRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 + 84 : 84 + insets.bottom;
 
-  const rows = useMemo(() => {
-    if (!employee) return [];
-    const out: { date: string; tips: number; hours: number }[] = [];
-    for (const entry of dayEntries) {
-      const results = calcDayResults(entry);
-      const mine = results.find((r) => r.shift.employeeId === employee.id);
-      if (mine) {
-        out.push({ date: entry.date, tips: mine.totalTips, hours: mine.hoursWorked });
-      }
+  const load = useCallback(async () => {
+    if (!token) {
+      setLoading(false);
+      return;
     }
-    return out.sort((a, b) => b.date.localeCompare(a.date));
-  }, [dayEntries, employee]);
+    setLoading(true);
+    try {
+      const data = await employeePortalService.getMyTips(token);
+      setRows(data.rows);
+      setTotal(data.total);
+    } catch {
+      setRows([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
-  const total = rows.reduce((s, r) => s + r.tips, 0);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -45,7 +57,9 @@ export default function EmployeeTipsScreen() {
           </Text>
         </View>
 
-        {rows.length === 0 ? (
+        {loading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+        ) : rows.length === 0 ? (
           <Text style={{ color: colors.mutedForeground, marginTop: 16 }}>{tr.employee.tipsEmpty}</Text>
         ) : (
           rows.map((r) => (
@@ -67,12 +81,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   title: { fontSize: 26, fontFamily: "Inter_700Bold" },
   sub: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 16 },
-  totalCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
+  totalCard: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 12 },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
   },
 });

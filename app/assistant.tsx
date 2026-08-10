@@ -15,10 +15,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { isAllowedAssistantRoute, normalizeAssistantRoute } from "@/lib/assistantNav";
-import { apiCall, getStoredToken } from "@/lib/api";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
+import { useAssistantLiveContext } from "@/hooks/useAssistantLiveContext";
+import { apiCall, getStoredToken } from "@/lib/api";
+import { isAllowedAssistantRoute, normalizeAssistantRoute } from "@/lib/assistantNav";
+import { navigateAssistantRoute } from "@/lib/navigateAssistant";
 
 type ChatRole = "user" | "assistant";
 
@@ -34,6 +36,7 @@ export default function AssistantScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tr, isRTL } = useLang();
+  const liveContext = useAssistantLiveContext();
   const [messages, setMessages] = useState<ChatBubble[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -50,19 +53,6 @@ export default function AssistantScreen() {
       },
     ]);
   }, [tr.assistant.welcome]);
-
-  const goTo = (route: string) => {
-    const path = normalizeAssistantRoute(route);
-    if (!isAllowedAssistantRoute(path)) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (path === "/") {
-      router.replace("/(tabs)" as any);
-    } else if (path === "/quick" || path === "/team" || path === "/bar" || path === "/more") {
-      router.push(`/(tabs)/${path.slice(1)}` as any);
-    } else {
-      router.push(path as any);
-    }
-  };
 
   const send = async (raw: string) => {
     const text = raw.trim();
@@ -89,20 +79,24 @@ export default function AssistantScreen() {
         {
           method: "POST",
           token,
-          body: { messages: forApi.length ? forApi : [{ role: "user", content: text }] },
+          body: {
+            messages: forApi.length ? forApi : [{ role: "user", content: text }],
+            context: liveContext,
+          },
         }
       );
 
-      const assistantMsg: ChatBubble = {
-        id: `a-${Date.now()}`,
-        role: "assistant",
-        content: res.reply || tr.assistant.emptyReply,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a-${Date.now()}`,
+          role: "assistant",
+          content: res.reply || tr.assistant.emptyReply,
+        },
+      ]);
 
       if (res.navigate && isAllowedAssistantRoute(normalizeAssistantRoute(res.navigate))) {
-        // Brief pause so user can read, then navigate
-        setTimeout(() => goTo(res.navigate!), 600);
+        setTimeout(() => navigateAssistantRoute(res.navigate!), 600);
       }
     } catch (e) {
       const msg =
@@ -165,7 +159,15 @@ export default function AssistantScreen() {
               <View
                 style={[
                   styles.bubbleRow,
-                  { justifyContent: mine ? (isRTL ? "flex-start" : "flex-end") : isRTL ? "flex-end" : "flex-start" },
+                  {
+                    justifyContent: mine
+                      ? isRTL
+                        ? "flex-start"
+                        : "flex-end"
+                      : isRTL
+                        ? "flex-end"
+                        : "flex-start",
+                  },
                 ]}
               >
                 <View
@@ -179,7 +181,10 @@ export default function AssistantScreen() {
                   <Text
                     style={[
                       styles.bubbleText,
-                      { color: mine ? colors.primaryForeground : colors.foreground, textAlign: isRTL ? "right" : "left" },
+                      {
+                        color: mine ? colors.primaryForeground : colors.foreground,
+                        textAlign: isRTL ? "right" : "left",
+                      },
                     ]}
                   >
                     {item.content}
@@ -191,14 +196,22 @@ export default function AssistantScreen() {
           ListFooterComponent={
             messages.length <= 1 ? (
               <View style={styles.suggestions}>
-                <Text style={[styles.suggestLabel, { color: colors.mutedForeground, textAlign: isRTL ? "right" : "left" }]}>
+                <Text
+                  style={[
+                    styles.suggestLabel,
+                    { color: colors.mutedForeground, textAlign: isRTL ? "right" : "left" },
+                  ]}
+                >
                   {tr.assistant.tryAsking}
                 </Text>
                 <View style={styles.suggestRow}>
                   {SUGGESTION_KEYS.map((key) => (
                     <TouchableOpacity
                       key={key}
-                      style={[styles.chip, { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.04)" }]}
+                      style={[
+                        styles.chip,
+                        { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.04)" },
+                      ]}
                       onPress={() => send(tr.assistant.suggestions[key])}
                     >
                       <Text style={[styles.chipText, { color: colors.primary }]}>
