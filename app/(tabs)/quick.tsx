@@ -15,24 +15,25 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EndShiftSummaryModal } from "@/components/EndShiftSummaryModal";
 import { StartShiftModal } from "@/components/StartShiftModal";
 import { TipsEntryModal } from "@/components/TipsEntryModal";
-import { todayString, useApp } from "@/context/AppContext";
+import { HintBanner } from "@/components/ui/EasyUI";
+import { todayString, useApp, generateId, DayEntry } from "@/context/AppContext";
 import { useBoniface } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
-const ACTIONS = [
-  { id: "writeoff",  icon: "clipboard",    label: "Списать",    color: "#FB923C", bg: "rgba(124,45,18,0.38)" },
-  { id: "stoplist",  icon: "slash",         label: "Стоп-лист",  color: "#F87171", bg: "rgba(127,29,29,0.38)" },
-  { id: "checklist", icon: "check-square",  label: "Задача",     color: "#4ADE80", bg: "rgba(20,83,45,0.38)" },
-  { id: "briefing",  icon: "calendar",      label: "Бриф",       color: "#60A5FA", bg: "rgba(30,58,95,0.38)" },
-  { id: "tips",      icon: "trending-up",   label: "Чаевые",     color: "#F59E0B", bg: "rgba(120,53,15,0.38)" },
-  { id: "schedule",  icon: "grid",          label: "Расписание", color: "#A78BFA", bg: "rgba(76,29,149,0.38)" },
-] as const;
+const ACTION_META = [
+  { id: "writeoff" as const, icon: "clipboard" as const, color: "#FB923C", bg: "rgba(124,45,18,0.38)" },
+  { id: "stoplist" as const, icon: "slash" as const, color: "#F87171", bg: "rgba(127,29,29,0.38)" },
+  { id: "checklist" as const, icon: "check-square" as const, color: "#4ADE80", bg: "rgba(20,83,45,0.38)" },
+  { id: "briefing" as const, icon: "calendar" as const, color: "#60A5FA", bg: "rgba(30,58,95,0.38)" },
+  { id: "tips" as const, icon: "trending-up" as const, color: "#F59E0B", bg: "rgba(120,53,15,0.38)" },
+  { id: "schedule" as const, icon: "grid" as const, color: "#A78BFA", bg: "rgba(76,29,149,0.38)" },
+];
 
 export default function QuickActionsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { tr } = useLang();
+  const { tr, isRTL } = useLang();
   const { shiftState, endShift, lowStockCount, writeOffs, stopList } = useBoniface();
   const { dayEntries } = useApp();
   const [tipsModal, setTipsModal] = useState(false);
@@ -43,7 +44,9 @@ export default function QuickActionsScreen() {
   const bottomPad = Platform.OS === "web" ? 34 + 84 : 84 + insets.bottom;
 
   const today = todayString();
-  const todayEntry = dayEntries.find((e) => e.date === today);
+  const todayEntry: DayEntry =
+    dayEntries.find((e) => e.date === today) ??
+    { id: generateId(), date: today, totalCash: 0, totalCard: 0, shifts: [] };
 
   const handleAction = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -60,12 +63,12 @@ export default function QuickActionsScreen() {
   const recentItems: { icon: string; text: string; color: string }[] = [
     ...stopList.slice(0, 2).map((s) => ({
       icon: "slash",
-      text: `Stop: ${s.name}`,
+      text: `${tr.quick.actions.stoplist.label}: ${s.name}`,
       color: "#F87171",
     })),
     ...writeOffs.slice(0, 2).map((w) => ({
       icon: "clipboard",
-      text: `Списано: ${w.quantity} ${w.unit ?? ""} ${w.itemName}`.trim(),
+      text: `${tr.quick.actions.writeoff.label}: ${w.quantity} ${w.unit ?? ""} ${w.itemName}`.trim(),
       color: "#FB923C",
     })),
   ].slice(0, 3);
@@ -76,7 +79,14 @@ export default function QuickActionsScreen() {
         contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: bottomPad }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Shift toggle banner */}
+        <Text style={[styles.screenTitle, { color: colors.foreground, textAlign: isRTL ? "right" : "left" }]}>
+          {tr.tabs.quick}
+        </Text>
+        <Text style={[styles.screenSub, { color: colors.mutedForeground, textAlign: isRTL ? "right" : "left" }]}>
+          {tr.quick.sub}
+        </Text>
+
+        {/* Shift toggle banner — primary decision */}
         <TouchableOpacity
           style={[
             styles.shiftBanner,
@@ -89,9 +99,11 @@ export default function QuickActionsScreen() {
             shiftState.active ? setEndShiftModal(true) : setStartShiftModal(true);
           }}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={shiftState.active ? tr.quick.endShift : tr.quick.startShift}
         >
           <View style={[styles.shiftBannerIcon, { backgroundColor: shiftState.active ? "rgba(239,68,68,0.18)" : "rgba(245,158,11,0.18)" }]}>
-            <Feather name={shiftState.active ? "stop-circle" : "play-circle"} size={20} color={shiftState.active ? "#F87171" : "#F59E0B"} />
+            <Feather name={shiftState.active ? "stop-circle" : "play-circle"} size={22} color={shiftState.active ? "#F87171" : "#F59E0B"} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.shiftBannerTitle, { color: shiftState.active ? "#F87171" : "#F59E0B" }]}>
@@ -101,49 +113,56 @@ export default function QuickActionsScreen() {
               {shiftState.active ? tr.quick.startedAt(shiftState.startTime ?? "") : tr.quick.recordStart}
             </Text>
           </View>
-          <Feather name="chevron-right" size={16} color={shiftState.active ? "#F87171" : "#F59E0B"} />
+          <Feather name={isRTL ? "chevron-left" : "chevron-right"} size={18} color={shiftState.active ? "#F87171" : "#F59E0B"} />
         </TouchableOpacity>
 
+        <HintBanner
+          text={shiftState.active ? tr.home.hintActive : tr.home.hintBefore}
+          icon="zap"
+        />
+
         {/* Panel card */}
-        <View style={styles.panel}>
-          {/* Panel header */}
+        <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.panelHeader}>
-            <View>
-              <Text style={styles.panelTitle}>{tr.quick.title}</Text>
-              <Text style={styles.panelSub}>{tr.quick.sub}</Text>
-            </View>
+            <Text style={[styles.panelTitle, { color: colors.foreground }]}>{tr.quick.title}</Text>
+            <Text style={[styles.panelSub, { color: colors.mutedForeground }]}>{tr.quick.sub}</Text>
           </View>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          {/* Action grid */}
           <View style={styles.actionGrid}>
-            {ACTIONS.map((action) => (
-              <TouchableOpacity
-                key={action.id}
-                style={[styles.actionTile, { backgroundColor: action.bg, borderColor: action.color + "25" }]}
-                onPress={() => handleAction(action.id)}
-                activeOpacity={0.75}
-              >
-                <View style={[styles.actionIconBox, { backgroundColor: action.color + "18" }]}>
-                  <Feather name={action.icon as any} size={18} color={action.color} />
-                </View>
-                <Text style={[styles.actionLabel, { color: action.color }]}>{action.label}</Text>
-              </TouchableOpacity>
-            ))}
+            {ACTION_META.map((action) => {
+              const copy = tr.quick.actions[action.id];
+              return (
+                <TouchableOpacity
+                  key={action.id}
+                  style={[styles.actionTile, { backgroundColor: action.bg, borderColor: action.color + "25" }]}
+                  onPress={() => handleAction(action.id)}
+                  activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${copy.label}. ${copy.hint}`}
+                >
+                  <View style={[styles.actionIconBox, { backgroundColor: action.color + "18" }]}>
+                    <Feather name={action.icon} size={20} color={action.color} />
+                  </View>
+                  <Text style={[styles.actionLabel, { color: action.color }]}>{copy.label}</Text>
+                  <Text style={styles.actionHint} numberOfLines={2}>{copy.hint}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           {recentItems.length > 0 && (
             <>
-              <View style={styles.divider} />
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
               <View style={styles.recentSection}>
-                <Text style={styles.recentTitle}>Последние</Text>
+                <Text style={[styles.recentTitle, { color: colors.mutedForeground }]}>{tr.quick.recent}</Text>
                 {recentItems.map((r, i) => (
                   <View key={i} style={styles.recentRow}>
                     <View style={[styles.recentIcon, { backgroundColor: r.color + "18" }]}>
                       <Feather name={r.icon as any} size={13} color={r.color} />
                     </View>
-                    <Text style={styles.recentText} numberOfLines={1}>{r.text}</Text>
+                    <Text style={[styles.recentText, { color: colors.foreground }]} numberOfLines={1}>{r.text}</Text>
                   </View>
                 ))}
               </View>
@@ -151,7 +170,6 @@ export default function QuickActionsScreen() {
           )}
         </View>
 
-        {/* Quick nav row */}
         <View style={styles.navRow}>
           {[
             { icon: "clock", label: tr.quick.historyLabel, route: "/history" },
@@ -187,7 +205,7 @@ export default function QuickActionsScreen() {
         onClose={() => setEndShiftModal(false)}
         onConfirm={() => { endShift(); }}
         shiftState={shiftState}
-        dayEntry={todayEntry ?? { id: "", date: today, totalCash: 0, totalCard: 0, shifts: [] }}
+        dayEntry={todayEntry}
       />
     </View>
   );
@@ -196,44 +214,83 @@ export default function QuickActionsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: 16 },
-
+  screenTitle: { fontSize: 26, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  screenSub: { fontSize: 14, fontFamily: "Inter_400Regular", marginBottom: 16 },
   shiftBanner: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    borderRadius: 18, borderWidth: 1, padding: 14, marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    minHeight: 72,
   },
-  shiftBannerIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  shiftBannerTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  shiftBannerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.35)", marginTop: 2 },
-
+  shiftBannerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shiftBannerTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  shiftBannerSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.45)", marginTop: 2 },
   panel: {
-    backgroundColor: "#161E2E",
-    borderRadius: 24, borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
-    marginBottom: 14, overflow: "hidden",
+    marginTop: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
   },
-  panelHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
-  panelTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
-  panelSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.4)", marginTop: 2 },
-  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.07)", marginHorizontal: 16 },
-
-  actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, padding: 16 },
+  panelHeader: { marginBottom: 4 },
+  panelTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  panelSub: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
+  divider: { height: 1, marginVertical: 14 },
+  actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   actionTile: {
-    width: "30%", flexGrow: 1,
-    borderRadius: 16, borderWidth: 1,
-    padding: 14, alignItems: "center", gap: 8,
+    width: "47%" as any,
+    flexGrow: 1,
+    minWidth: "42%" as any,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    minHeight: 108,
+    gap: 6,
   },
-  actionIconBox: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  actionLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center" },
-
-  recentSection: { padding: 16, gap: 10 },
-  recentTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.3)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 },
+  actionIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  actionLabel: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  actionHint: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.45)", lineHeight: 16 },
+  recentSection: { gap: 10 },
+  recentTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", letterSpacing: 0.4, textTransform: "uppercase" },
   recentRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  recentIcon: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  recentText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", flex: 1 },
-
-  navRow: { flexDirection: "row", gap: 10 },
-  navCard: { flex: 1, borderRadius: 16, borderWidth: 1, padding: 14, alignItems: "center", gap: 6, position: "relative" },
-  navLabel: { fontSize: 10, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.38)", textAlign: "center" },
-  navBadge: { position: "absolute", top: 8, right: 8, backgroundColor: "#EF4444", borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 },
-  navBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
+  recentIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  recentText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
+  navRow: { flexDirection: "row", gap: 8, marginTop: 14 },
+  navCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 6,
+    minHeight: 72,
+  },
+  navLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.55)" },
+  navBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#EF4444",
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    minWidth: 18,
+    alignItems: "center",
+  },
+  navBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#fff" },
 });

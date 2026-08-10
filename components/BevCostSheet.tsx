@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { CATEGORY_LABELS, StockItem, calcBeverageCost, useBoniface } from "@/context/BonifaceContext";
+import { StockCategory, StockItem, calcBeverageCost, getLocalizedStockItem, useBoniface } from "@/context/BonifaceContext";
+import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
 interface Props {
@@ -36,13 +37,6 @@ const TIER_COLORS: Record<CostTier, string> = {
   critical: "#EF4444",
 };
 
-const TIER_LABELS: Record<CostTier, string> = {
-  great: "Отлично",
-  good: "Норма",
-  high: "Высокий",
-  critical: "Критично",
-};
-
 interface EditState {
   purchasePrice: string;
   portionsPerUnit: string;
@@ -52,18 +46,28 @@ interface EditState {
 export function BevCostSheet({ visible, onClose }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { tr } = useLang();
   const { stockItems, updateStockItem } = useBoniface();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState>({ purchasePrice: "", portionsPerUnit: "", sellingPrice: "" });
   const [filterSet, setFilterSet] = useState<"all" | "set" | "unset">("all");
 
-  const filtered = stockItems.filter((s) => {
-    const hasCost = s.purchasePrice != null && s.portionsPerUnit != null && s.sellingPrice != null;
-    if (filterSet === "set") return hasCost;
-    if (filterSet === "unset") return !hasCost;
-    return true;
-  });
+  const tierLabels: Record<CostTier, string> = {
+    great: tr.bevCost.tierGreat,
+    good: tr.bevCost.tierGood,
+    high: tr.bevCost.tierHigh,
+    critical: tr.bevCost.tierCritical,
+  };
+
+  const filtered = stockItems
+    .filter((s) => {
+      const hasCost = s.purchasePrice != null && s.portionsPerUnit != null && s.sellingPrice != null;
+      if (filterSet === "set") return hasCost;
+      if (filterSet === "unset") return !hasCost;
+      return true;
+    })
+    .map((s) => getLocalizedStockItem(s, tr));
 
   const setItems = stockItems.filter((s) => s.purchasePrice != null && s.portionsPerUnit != null && s.sellingPrice != null);
   const avgCost = setItems.length > 0
@@ -94,6 +98,8 @@ export function BevCostSheet({ visible, onClose }: Props) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
+  const categoryLabel = (cat: StockCategory) => tr.categories[cat];
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -107,9 +113,9 @@ export function BevCostSheet({ visible, onClose }: Props) {
                 <Feather name="percent" size={18} color="#F59E0B" />
               </View>
               <View>
-                <Text style={[styles.title, { color: colors.foreground }]}>Бевередж кост</Text>
+                <Text style={[styles.title, { color: colors.foreground }]}>{tr.bevCost.title}</Text>
                 <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                  {avgCost != null ? `Средний кост: ${avgCost.toFixed(1)}%` : `Настройте цены для расчёта`}
+                  {avgCost != null ? tr.bevCost.avgCost(avgCost.toFixed(1)) : tr.bevCost.setupPrices}
                 </Text>
               </View>
             </View>
@@ -122,19 +128,19 @@ export function BevCostSheet({ visible, onClose }: Props) {
             <View style={styles.avgBar}>
               <View style={[styles.avgItem, { backgroundColor: "#10B98118", borderColor: "#10B98133" }]}>
                 <Text style={[styles.avgLabel, { color: "#10B981" }]}>≤15%</Text>
-                <Text style={[styles.avgSub, { color: "#10B981" }]}>Отлично</Text>
+                <Text style={[styles.avgSub, { color: "#10B981" }]}>{tr.bevCost.tierGreat}</Text>
               </View>
               <View style={[styles.avgItem, { backgroundColor: "#F59E0B18", borderColor: "#F59E0B33" }]}>
                 <Text style={[styles.avgLabel, { color: "#F59E0B" }]}>15–22%</Text>
-                <Text style={[styles.avgSub, { color: "#F59E0B" }]}>Норма</Text>
+                <Text style={[styles.avgSub, { color: "#F59E0B" }]}>{tr.bevCost.tierGood}</Text>
               </View>
               <View style={[styles.avgItem, { backgroundColor: "#F9731618", borderColor: "#F9731633" }]}>
                 <Text style={[styles.avgLabel, { color: "#F97316" }]}>22–28%</Text>
-                <Text style={[styles.avgSub, { color: "#F97316" }]}>Высокий</Text>
+                <Text style={[styles.avgSub, { color: "#F97316" }]}>{tr.bevCost.tierHigh}</Text>
               </View>
               <View style={[styles.avgItem, { backgroundColor: "#EF444418", borderColor: "#EF444433" }]}>
                 <Text style={[styles.avgLabel, { color: "#EF4444" }]}>{">"}28%</Text>
-                <Text style={[styles.avgSub, { color: "#EF4444" }]}>Критично</Text>
+                <Text style={[styles.avgSub, { color: "#EF4444" }]}>{tr.bevCost.tierCritical}</Text>
               </View>
             </View>
           )}
@@ -147,7 +153,7 @@ export function BevCostSheet({ visible, onClose }: Props) {
                 onPress={() => setFilterSet(f)}
               >
                 <Text style={[styles.filterBtnText, { color: filterSet === f ? colors.primary : colors.mutedForeground }]}>
-                  {f === "all" ? "Все" : f === "set" ? "Настроено" : "Без цен"}
+                  {f === "all" ? tr.bevCost.filterAll : f === "set" ? tr.bevCost.filterSet : tr.bevCost.filterUnset}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -166,16 +172,16 @@ export function BevCostSheet({ visible, onClose }: Props) {
                   <View style={styles.cardTop}>
                     <View style={styles.cardLeft}>
                       <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
-                      <Text style={[styles.cardCat, { color: colors.mutedForeground }]}>{CATEGORY_LABELS[item.category]}</Text>
+                      <Text style={[styles.cardCat, { color: colors.mutedForeground }]}>{categoryLabel(item.category)}</Text>
                     </View>
                     <View style={styles.cardRight}>
                       {costPct != null ? (
                         <View style={[styles.costBadge, { backgroundColor: tierColor + "22" }]}>
                           <Text style={[styles.costPct, { color: tierColor }]}>{costPct.toFixed(1)}%</Text>
-                          <Text style={[styles.costTier, { color: tierColor }]}>{TIER_LABELS[tier!]}</Text>
+                          <Text style={[styles.costTier, { color: tierColor }]}>{tierLabels[tier!]}</Text>
                         </View>
                       ) : (
-                        <Text style={[styles.noCost, { color: colors.mutedForeground }]}>Нет данных</Text>
+                        <Text style={[styles.noCost, { color: colors.mutedForeground }]}>{tr.bevCost.noData}</Text>
                       )}
                       <TouchableOpacity onPress={() => isEditing ? setEditingId(null) : openEdit(item)} style={styles.editBtn}>
                         <Feather name={isEditing ? "chevron-up" : "edit-2"} size={14} color={colors.mutedForeground} />
@@ -186,10 +192,14 @@ export function BevCostSheet({ visible, onClose }: Props) {
                   {hasCost && !isEditing && (
                     <View style={styles.costDetails}>
                       <Text style={[styles.costDetail, { color: colors.mutedForeground }]}>
-                        Закупка: {item.purchasePrice} ₪ · {item.portionsPerUnit} порц. · {(item.purchasePrice! / item.portionsPerUnit!).toFixed(2)} ₪/порц.
+                        {tr.bevCost.purchaseDetail(
+                          String(item.purchasePrice),
+                          String(item.portionsPerUnit),
+                          (item.purchasePrice! / item.portionsPerUnit!).toFixed(2)
+                        )}
                       </Text>
                       <Text style={[styles.costDetail, { color: colors.mutedForeground }]}>
-                        Цена продажи: {item.sellingPrice} ₪
+                        {tr.bevCost.sellPrice(String(item.sellingPrice))}
                       </Text>
                     </View>
                   )}
@@ -198,7 +208,7 @@ export function BevCostSheet({ visible, onClose }: Props) {
                     <View style={[styles.editForm, { borderTopColor: colors.border }]}>
                       <View style={styles.editRow}>
                         <View style={styles.editField}>
-                          <Text style={[styles.editLabel, { color: colors.mutedForeground }]}>ЗАКУПКА (₪/бут.)</Text>
+                          <Text style={[styles.editLabel, { color: colors.mutedForeground }]}>{tr.bevCost.purchaseLabel}</Text>
                           <TextInput
                             style={[styles.editInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
                             value={editState.purchasePrice}
@@ -209,7 +219,7 @@ export function BevCostSheet({ visible, onClose }: Props) {
                           />
                         </View>
                         <View style={styles.editField}>
-                          <Text style={[styles.editLabel, { color: colors.mutedForeground }]}>ПОРЦИЙ</Text>
+                          <Text style={[styles.editLabel, { color: colors.mutedForeground }]}>{tr.bevCost.portionsLabel}</Text>
                           <TextInput
                             style={[styles.editInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
                             value={editState.portionsPerUnit}
@@ -220,7 +230,7 @@ export function BevCostSheet({ visible, onClose }: Props) {
                           />
                         </View>
                         <View style={styles.editField}>
-                          <Text style={[styles.editLabel, { color: colors.mutedForeground }]}>ЦЕНА (₪)</Text>
+                          <Text style={[styles.editLabel, { color: colors.mutedForeground }]}>{tr.bevCost.priceLabel}</Text>
                           <TextInput
                             style={[styles.editInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
                             value={editState.sellingPrice}
@@ -234,7 +244,7 @@ export function BevCostSheet({ visible, onClose }: Props) {
                       {editState.purchasePrice && editState.portionsPerUnit && editState.sellingPrice && (
                         <View style={[styles.previewBox, { backgroundColor: colors.card }]}>
                           <Text style={[styles.previewText, { color: colors.mutedForeground }]}>
-                            Предварительно:{" "}
+                            {tr.bevCost.preview}{" "}
                             <Text style={{ color: colors.foreground, fontFamily: "Inter_700Bold" }}>
                               {calcBeverageCost(
                                 parseFloat(editState.purchasePrice) || 0,
@@ -246,7 +256,7 @@ export function BevCostSheet({ visible, onClose }: Props) {
                         </View>
                       )}
                       <TouchableOpacity style={[styles.saveBtn, { backgroundColor: colors.primary }]} onPress={handleSave}>
-                        <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>Сохранить</Text>
+                        <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>{tr.team.save}</Text>
                       </TouchableOpacity>
                     </View>
                   )}

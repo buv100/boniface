@@ -49,7 +49,8 @@ export const FEATURE_CARDS: FeatureCard[] = [
     rarity: "common",
     category: "shifts",
     isPremium: false,
-    implemented: false,
+    implemented: true,
+    route: "/more",
   },
   {
     id: "shift-goals",
@@ -60,7 +61,8 @@ export const FEATURE_CARDS: FeatureCard[] = [
     rarity: "common",
     category: "shifts",
     isPremium: false,
-    implemented: false,
+    implemented: true,
+    route: "/",
   },
   {
     id: "team-roles",
@@ -71,7 +73,8 @@ export const FEATURE_CARDS: FeatureCard[] = [
     rarity: "rare",
     category: "team",
     isPremium: true,
-    implemented: false,
+    implemented: true,
+    route: "/team",
   },
   {
     id: "export-reports",
@@ -82,7 +85,8 @@ export const FEATURE_CARDS: FeatureCard[] = [
     rarity: "rare",
     category: "analytics",
     isPremium: true,
-    implemented: false,
+    implemented: true,
+    route: "/stats",
   },
   {
     id: "weekly-analytics",
@@ -127,7 +131,8 @@ export const FEATURE_CARDS: FeatureCard[] = [
     rarity: "epic",
     category: "team",
     isPremium: true,
-    implemented: false,
+    implemented: true,
+    route: "/stats",
   },
   {
     id: "multibar",
@@ -138,6 +143,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
     rarity: "legendary",
     category: "premium",
     isPremium: true,
-    implemented: false,
+    implemented: true,
+    route: "/",
   },
 ];

@@ -1,0 +1,41 @@
+import "./env";
+
+import cors from "cors";
+import express from "express";
+
+import { ensureSchema } from "./db";
+import authRoutes from "./routes/auth";
+import dayEntriesRoutes from "./routes/dayEntries";
+import employeesRoutes from "./routes/employees";
+import stockRoutes from "./routes/stock";
+import syncRoutes from "./routes/sync";
+import venueRoutes from "./routes/venue";
+
+ensureSchema();
+
+const app = express();
+const PORT = Number(process.env.PORT) || 3001;
+
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
+
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, service: "boniface-api", time: new Date().toISOString() });
+});
+
+app.use("/api/auth", authRoutes);
+app.use("/api/employees", employeesRoutes);
+app.use("/api/day-entries", dayEntriesRoutes);
+app.use("/api/venue", venueRoutes);
+app.use("/api", stockRoutes);
+app.use("/api", syncRoutes);
+
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+app.listen(PORT, () => {
+  console.log(`Boniface API listening on http://localhost:${PORT}`);
+  console.log(`Health: http://localhost:${PORT}/api/health`);
+});

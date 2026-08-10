@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Checklist, useBoniface } from "@/context/BonifaceContext";
+import { Checklist, getLocalizedChecklist, useBoniface } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -31,7 +31,8 @@ export function SmartChecklistModal({ visible, checklist, onClose }: Props) {
   const [fadeAnim] = useState(new Animated.Value(1));
   const [scaleAnim] = useState(new Animated.Value(1));
 
-  const items = checklist?.items ?? [];
+  const localized = checklist ? getLocalizedChecklist(checklist, tr) : null;
+  const items = localized?.items ?? [];
   const total = items.length;
   const done = items.filter((i) => i.done).length;
   const allDone = done === total && total > 0;
@@ -100,7 +101,7 @@ export function SmartChecklistModal({ visible, checklist, onClose }: Props) {
             <Feather name="x" size={22} color={colors.mutedForeground} />
           </TouchableOpacity>
           <Text style={[styles.topTitle, { color: colors.mutedForeground }]} numberOfLines={1}>
-            {checklist.title}
+            {localized?.title ?? checklist.title}
           </Text>
           <TouchableOpacity onPress={handleReset} style={styles.resetBtn}>
             <Feather name="refresh-cw" size={18} color={colors.mutedForeground} />
@@ -129,7 +130,7 @@ export function SmartChecklistModal({ visible, checklist, onClose }: Props) {
             </View>
             <Text style={[styles.doneTitle, { color: "#10B981" }]}>{tr.smartChecklist.allDone}</Text>
             <Text style={[styles.doneSub, { color: colors.mutedForeground }]}>
-              {tr.smartChecklist.allDoneSub(checklist.title)}
+              {tr.smartChecklist.allDoneSub(localized?.title ?? checklist.title)}
             </Text>
             <TouchableOpacity
               style={[styles.doneBtn, { backgroundColor: colors.card, borderColor: colors.border }]}

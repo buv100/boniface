@@ -16,17 +16,22 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BevCostSheet } from "@/components/BevCostSheet";
+import { HappyHourSheet } from "@/components/HappyHourSheet";
+import { InventorySheet } from "@/components/InventorySheet";
 import { StopListSheet } from "@/components/StopListSheet";
 import { WriteOffSheet } from "@/components/WriteOffSheet";
 import {
   StockCategory,
   StockItem,
+  StockSubCategory,
+  getLocalizedStockItem,
   useBoniface,
 } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
 const ALL_CATEGORIES: StockCategory[] = ["spirits", "wine", "beer", "mixers", "garnish", "supplies"];
+const ALL_SUBCATEGORIES: StockSubCategory[] = ["display", "speedbar", "storage", "custom"];
 
 const CATEGORY_COLORS: Record<StockCategory, string> = {
   spirits: "#F59E0B",
@@ -70,18 +75,22 @@ export default function BarScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tr } = useLang();
-  const { stockItems, updateStockQuantity, updateStockItem, addStockItem, deleteStockItem, lowStockCount, stopList, writeOffs } = useBoniface();
+  const { stockItems, updateStockQuantity, updateStockItem, addStockItem, deleteStockItem, lowStockCount, stopList, writeOffs, isHappyHourActive, activeHappyHour } = useBoniface();
 
   const [selectedCat, setSelectedCat] = useState<StockCategory | "all">("all");
+  const [selectedSub, setSelectedSub] = useState<StockSubCategory | "all">("all");
   const [sortByLow, setSortByLow] = useState(false);
 
   const [stopListVisible, setStopListVisible] = useState(false);
   const [writeOffVisible, setWriteOffVisible] = useState(false);
   const [bevCostVisible, setBevCostVisible] = useState(false);
+  const [happyHourVisible, setHappyHourVisible] = useState(false);
+  const [inventoryVisible, setInventoryVisible] = useState(false);
 
   const [addModal, setAddModal] = useState(false);
   const [newName, setNewName] = useState("");
   const [newCat, setNewCat] = useState<StockCategory>("spirits");
+  const [newSub, setNewSub] = useState<StockSubCategory | undefined>(undefined);
   const [newQty, setNewQty] = useState("");
   const [newUnit, setNewUnit] = useState("");
   const [newMin, setNewMin] = useState("");
@@ -90,6 +99,7 @@ export default function BarScreen() {
   const [editItem, setEditItem] = useState<StockItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editCat, setEditCat] = useState<StockCategory>("spirits");
+  const [editSub, setEditSub] = useState<StockSubCategory | undefined>(undefined);
   const [editUnit, setEditUnit] = useState("");
   const [editMin, setEditMin] = useState("");
   const [editExpiry, setEditExpiry] = useState("");
@@ -104,6 +114,7 @@ export default function BarScreen() {
 
   const filtered = stockItems
     .filter((i) => selectedCat === "all" || i.category === selectedCat)
+    .filter((i) => selectedSub === "all" || i.subCategory === selectedSub)
     .sort((a, b) => {
       if (sortByLow) {
         const aLow = a.quantity < a.minQuantity ? 0 : 1;
@@ -111,15 +122,18 @@ export default function BarScreen() {
         return aLow - bLow;
       }
       return 0;
-    });
+    })
+    .map((i) => getLocalizedStockItem(i, tr));
 
   const lowItems = stockItems.filter((i) => i.quantity < i.minQuantity);
 
   const openEdit = (item: StockItem) => {
+    const loc = getLocalizedStockItem(item, tr);
     setEditItem(item);
-    setEditName(item.name);
+    setEditName(loc.name);
     setEditCat(item.category);
-    setEditUnit(item.unit);
+    setEditSub(item.subCategory);
+    setEditUnit(loc.unit);
     setEditMin(item.minQuantity.toString());
     setEditExpiry(item.expiryDate ?? "");
     setEditModal(true);
@@ -149,8 +163,10 @@ export default function BarScreen() {
       quantity: parseFloat(newQty) || 0,
       unit: newUnit || tr.bar.unitPlaceholder,
       minQuantity: parseFloat(newMin) || 1,
+      subCategory: newSub,
     });
     setNewName(""); setNewQty(""); setNewUnit(""); setNewMin("");
+    setNewSub(undefined);
     setAddModal(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
@@ -163,6 +179,7 @@ export default function BarScreen() {
       unit: editUnit || tr.bar.unitPlaceholder,
       minQuantity: parseFloat(editMin) || 1,
       expiryDate: editExpiry.trim() || undefined,
+      subCategory: editSub,
     });
     setEditModal(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -208,6 +225,7 @@ export default function BarScreen() {
               <View style={styles.itemSubRow}>
                 <Text style={[styles.itemCat, { color: colors.mutedForeground }]}>
                   {tr.categories[item.category]}
+                  {item.subCategory ? ` · ${tr.subCategories[item.subCategory]}` : ""}
                 </Text>
                 {hasExpiryWarning && (
                   <View style={[styles.expiryBadge, { backgroundColor: expiryColor + "22" }]}>
@@ -277,6 +295,58 @@ export default function BarScreen() {
     </ScrollView>
   );
 
+  const SubCatPicker = ({
+    value,
+    onChange,
+  }: {
+    value: StockSubCategory | undefined;
+    onChange: (c: StockSubCategory | undefined) => void;
+  }) => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+      <TouchableOpacity
+        style={[
+          styles.catChip,
+          {
+            backgroundColor: value === undefined ? colors.primary + "22" : colors.secondary,
+            borderColor: value === undefined ? colors.primary : colors.border,
+          },
+        ]}
+        onPress={() => onChange(undefined)}
+      >
+        <Text
+          style={[
+            styles.catChipText,
+            { color: value === undefined ? colors.primary : colors.mutedForeground },
+          ]}
+        >
+          {tr.bar.subCategoryNone}
+        </Text>
+      </TouchableOpacity>
+      {ALL_SUBCATEGORIES.map((sub) => (
+        <TouchableOpacity
+          key={sub}
+          style={[
+            styles.catChip,
+            {
+              backgroundColor: value === sub ? colors.primary + "22" : colors.secondary,
+              borderColor: value === sub ? colors.primary : colors.border,
+            },
+          ]}
+          onPress={() => onChange(sub)}
+        >
+          <Text
+            style={[
+              styles.catChipText,
+              { color: value === sub ? colors.primary : colors.mutedForeground },
+            ]}
+          >
+            {tr.subCategories[sub]}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
@@ -290,7 +360,17 @@ export default function BarScreen() {
           <>
             <View style={styles.pageHeader}>
               <View>
-                <Text style={[styles.pageTitle, { color: colors.foreground }]}>{tr.bar.title}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={[styles.pageTitle, { color: colors.foreground }]}>{tr.bar.title}</Text>
+                  {isHappyHourActive && activeHappyHour && (
+                    <View style={[styles.hhBadge, { backgroundColor: "#10B98122", borderColor: "#10B98155" }]}>
+                      <Feather name="clock" size={11} color="#10B981" />
+                      <Text style={styles.hhBadgeText}>
+                        {tr.bar.happyHourActive(activeHappyHour.discountPercent)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={[styles.pageSubtitle, { color: colors.mutedForeground }]}>
                   {tr.bar.positions(stockItems.length)}
                 </Text>
@@ -334,6 +414,28 @@ export default function BarScreen() {
                 <Text style={[styles.actionBtnText, { color: "#8B5CF6" }]}>
                   {tr.bar.writeOffs}{writeOffs.length > 0 ? ` (${writeOffs.length})` : ""}
                 </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionBtn,
+                  {
+                    backgroundColor: isHappyHourActive ? "#10B98114" : "#38BDF814",
+                    borderColor: isHappyHourActive ? "#10B98133" : "#38BDF833",
+                  },
+                ]}
+                onPress={() => { setHappyHourVisible(true); Haptics.selectionAsync(); }}
+              >
+                <Feather name="clock" size={14} color={isHappyHourActive ? "#10B981" : "#38BDF8"} />
+                <Text style={[styles.actionBtnText, { color: isHappyHourActive ? "#10B981" : "#38BDF8" }]}>
+                  {tr.bar.happyHour}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: "#14B8A614", borderColor: "#14B8A633" }]}
+                onPress={() => { setInventoryVisible(true); Haptics.selectionAsync(); }}
+              >
+                <Feather name="clipboard" size={14} color="#14B8A6" />
+                <Text style={[styles.actionBtnText, { color: "#14B8A6" }]}>{tr.bar.inventory}</Text>
               </TouchableOpacity>
             </View>
 
@@ -389,6 +491,53 @@ export default function BarScreen() {
                 );
               })}
             </ScrollView>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subScroll} contentContainerStyle={styles.catContent}>
+              <TouchableOpacity
+                style={[
+                  styles.catChip,
+                  {
+                    backgroundColor: selectedSub === "all" ? colors.primary + "22" : colors.card,
+                    borderColor: selectedSub === "all" ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => setSelectedSub("all")}
+              >
+                <Text
+                  style={[
+                    styles.catChipText,
+                    { color: selectedSub === "all" ? colors.primary : colors.mutedForeground },
+                  ]}
+                >
+                  {tr.bar.allFilter}
+                </Text>
+              </TouchableOpacity>
+              {ALL_SUBCATEGORIES.map((sub) => {
+                const active = selectedSub === sub;
+                return (
+                  <TouchableOpacity
+                    key={sub}
+                    style={[
+                      styles.catChip,
+                      {
+                        backgroundColor: active ? "#14B8A622" : colors.card,
+                        borderColor: active ? "#14B8A6" : colors.border,
+                      },
+                    ]}
+                    onPress={() => setSelectedSub(sub)}
+                  >
+                    <Text
+                      style={[
+                        styles.catChipText,
+                        { color: active ? "#14B8A6" : colors.mutedForeground },
+                      ]}
+                    >
+                      {tr.subCategories[sub]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </>
         }
       />
@@ -425,6 +574,9 @@ export default function BarScreen() {
               </FormField>
               <FormField label={tr.bar.categoryLabel}>
                 <CatPicker value={newCat} onChange={setNewCat} />
+              </FormField>
+              <FormField label={tr.bar.subCategoryLabel}>
+                <SubCatPicker value={newSub} onChange={setNewSub} />
               </FormField>
               <View style={styles.fieldRow}>
                 <View style={styles.fieldHalf}>
@@ -502,6 +654,9 @@ export default function BarScreen() {
               <FormField label={tr.bar.categoryLabel}>
                 <CatPicker value={editCat} onChange={setEditCat} />
               </FormField>
+              <FormField label={tr.bar.subCategoryLabel}>
+                <SubCatPicker value={editSub} onChange={setEditSub} />
+              </FormField>
               <View style={styles.fieldRow}>
                 <View style={styles.fieldHalf}>
                   <FormField label={tr.bar.unitLabel}>
@@ -556,6 +711,8 @@ export default function BarScreen() {
       <StopListSheet visible={stopListVisible} onClose={() => setStopListVisible(false)} />
       <WriteOffSheet visible={writeOffVisible} onClose={() => setWriteOffVisible(false)} />
       <BevCostSheet visible={bevCostVisible} onClose={() => setBevCostVisible(false)} />
+      <HappyHourSheet visible={happyHourVisible} onClose={() => setHappyHourVisible(false)} />
+      <InventorySheet visible={inventoryVisible} onClose={() => setInventoryVisible(false)} />
 
       {/* Set quantity modal */}
       <Modal visible={qtyModal} transparent animationType="fade" onRequestClose={() => setQtyModal(false)}>
@@ -605,6 +762,16 @@ const styles = StyleSheet.create({
   pageHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12, paddingTop: 8 },
   pageTitle: { fontSize: 26, fontFamily: "Inter_700Bold" },
   pageSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
+  hhBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  hhBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#10B981" },
   sortBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
   sortBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   alertCard: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 14 },
@@ -612,7 +779,8 @@ const styles = StyleSheet.create({
   alertContent: { flex: 1, gap: 2 },
   alertTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
   alertSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  catScroll: { marginBottom: 16 },
+  catScroll: { marginBottom: 8 },
+  subScroll: { marginBottom: 16 },
   catContent: { gap: 8, paddingRight: 4 },
   catChip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   catChipText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
@@ -623,8 +791,8 @@ const styles = StyleSheet.create({
   itemLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   catDot: { width: 10, height: 10, borderRadius: 5 },
   itemInfo: { flex: 1 },
-  actionRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
-  actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 9, borderRadius: 10, borderWidth: 1 },
+  actionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+  actionBtn: { flexGrow: 1, flexBasis: "45%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 9, borderRadius: 10, borderWidth: 1 },
   actionBtnText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   itemSubRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
   itemName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },

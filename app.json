@@ -45,7 +45,9 @@
     "extra": {
       "eas": {
         "projectId": "935a5402-55fc-4a02-bf0d-6885db91e3fa"
-      }
+      },
+      "privacyUrl": "https://raw.githubusercontent.com/buv100/boniface/main/docs/privacy.html",
+      "termsUrl": "https://raw.githubusercontent.com/buv100/boniface/main/docs/terms.html"
     },
     "owner": "antonkaydin"
   }

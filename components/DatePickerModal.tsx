@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
 interface DatePickerModalProps {
@@ -39,12 +40,10 @@ function firstDayOfMonth(y: number, m: number): number {
   return d === 0 ? 6 : d - 1;
 }
 
-const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-const RU_DAYS = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
-
 export function DatePickerModal({ visible, currentDate, maxDate, onSelect, onClose }: DatePickerModalProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { tr } = useLang();
 
   const todayStr = (() => {
     const d = new Date();
@@ -116,32 +115,28 @@ export function DatePickerModal({ visible, currentDate, maxDate, onSelect, onClo
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} onPress={() => {}}>
           <View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
-            {/* Handle */}
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
-            {/* Month nav */}
             <View style={[styles.monthRow]}>
               <TouchableOpacity style={styles.monthBtn} onPress={handlePrevMonth}>
                 <Feather name="chevron-left" size={22} color={colors.foreground} />
               </TouchableOpacity>
               <Text style={[styles.monthTitle, { color: colors.foreground }]}>
-                {RU_MONTHS[viewMonth - 1]} {viewYear}
+                {tr.months[viewMonth - 1]} {viewYear}
               </Text>
               <TouchableOpacity style={styles.monthBtn} onPress={handleNextMonth} disabled={!canGoNext()}>
                 <Feather name="chevron-right" size={22} color={canGoNext() ? colors.foreground : colors.border} />
               </TouchableOpacity>
             </View>
 
-            {/* Weekday headers */}
             <View style={styles.weekRow}>
-              {RU_DAYS.map((d, i) => (
+              {tr.datePicker.weekDays.map((d, i) => (
                 <View key={i} style={[styles.cell, { width: CELL }]}>
                   <Text style={[styles.weekLabel, { color: i >= 5 ? colors.primary : colors.mutedForeground }]}>{d}</Text>
                 </View>
               ))}
             </View>
 
-            {/* Calendar grid */}
             {rows.map((row, ri) => (
               <View key={ri} style={styles.weekRow}>
                 {row.map((day, ci) => {
@@ -180,7 +175,6 @@ export function DatePickerModal({ visible, currentDate, maxDate, onSelect, onClo
               </View>
             ))}
 
-            {/* Quick nav: Today */}
             <TouchableOpacity
               style={[styles.todayBtn, { borderColor: colors.border }]}
               onPress={() => {
@@ -190,7 +184,7 @@ export function DatePickerModal({ visible, currentDate, maxDate, onSelect, onClo
               }}
             >
               <Feather name="calendar" size={14} color={colors.primary} />
-              <Text style={[styles.todayBtnText, { color: colors.primary }]}>Перейти на сегодня</Text>
+              <Text style={[styles.todayBtnText, { color: colors.primary }]}>{tr.datePicker.goToday}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>

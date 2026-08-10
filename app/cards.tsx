@@ -67,9 +67,9 @@ export default function CardsScreen() {
   const getCardText = (card: FeatureCard) => {
     const lc = tr.featureCards[card.id];
     return {
-      title: lc?.title ?? card.title,
-      description: lc?.description ?? card.description,
-      flavor: lc?.flavor ?? card.flavor,
+      title: lc?.title ?? card.id,
+      description: lc?.description ?? "",
+      flavor: lc?.flavor ?? "",
     };
   };
 
@@ -99,7 +99,7 @@ export default function CardsScreen() {
             {!unlocked && (
               <View style={[styles.lockBadge, { backgroundColor: c.secondary, borderColor: c.border }]}>
                 <Feather name="lock" size={9} color={c.mutedForeground} />
-                <Text style={[styles.lockText, { color: c.mutedForeground }]}>Premium</Text>
+                <Text style={[styles.lockText, { color: c.mutedForeground }]}>{tr.cards.premium}</Text>
               </View>
             )}
           </View>
@@ -142,7 +142,7 @@ export default function CardsScreen() {
           {isPremium ? (
             <View style={[styles.premiumBadge, { backgroundColor: "#F59E0B22", borderColor: "#F59E0B44" }]}>
               <Feather name="star" size={13} color="#F59E0B" />
-              <Text style={[styles.premiumText, { color: "#F59E0B" }]}>Premium</Text>
+              <Text style={[styles.premiumText, { color: "#F59E0B" }]}>{tr.cards.premium}</Text>
             </View>
           ) : (
             <TouchableOpacity

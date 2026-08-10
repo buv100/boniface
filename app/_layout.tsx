@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -15,7 +15,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { BonifaceProvider } from "@/context/BonifaceContext";
 import { LangProvider } from "@/context/LangContext";
 
@@ -23,13 +23,39 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
+function RoleGate({ children }: { children: React.ReactNode }) {
+  const { isLoggedIn, isEmployee, isManager, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+    const root = String(segments[0] ?? "");
+    const inEmployee = root === "employee";
+    if (isLoggedIn && isEmployee && !inEmployee) {
+      router.replace("/employee" as any);
+    } else if (isLoggedIn && isManager && inEmployee) {
+      router.replace("/");
+    }
+  }, [isLoggedIn, isEmployee, isManager, isLoading, segments, router]);
+
+  return <>{children}</>;
+}
+
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="cards" options={{ headerShown: false }} />
-      <Stack.Screen name="account" options={{ headerShown: false, presentation: "modal" }} />
-    </Stack>
+    <RoleGate>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="employee" options={{ headerShown: false }} />
+        <Stack.Screen name="cards" options={{ headerShown: false }} />
+        <Stack.Screen name="account" options={{ headerShown: false, presentation: "modal" }} />
+        <Stack.Screen name="privacy" options={{ headerShown: false }} />
+        <Stack.Screen name="terms" options={{ headerShown: false }} />
+        <Stack.Screen name="briefing" options={{ headerShown: false }} />
+        <Stack.Screen name="schedule" options={{ headerShown: false }} />
+      </Stack>
+    </RoleGate>
   );
 }
 
@@ -54,17 +80,17 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-          <AppProvider>
-            <BonifaceProvider>
-              <LangProvider>
-                <GestureHandlerRootView>
-                  <KeyboardProvider>
-                    <RootLayoutNav />
-                  </KeyboardProvider>
-                </GestureHandlerRootView>
-              </LangProvider>
-            </BonifaceProvider>
-          </AppProvider>
+            <AppProvider>
+              <BonifaceProvider>
+                <LangProvider>
+                  <GestureHandlerRootView>
+                    <KeyboardProvider>
+                      <RootLayoutNav />
+                    </KeyboardProvider>
+                  </GestureHandlerRootView>
+                </LangProvider>
+              </BonifaceProvider>
+            </AppProvider>
           </AuthProvider>
         </QueryClientProvider>
       </ErrorBoundary>

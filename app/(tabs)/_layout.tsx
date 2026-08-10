@@ -3,24 +3,35 @@ import { Tabs } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { SymbolView } from "expo-symbols";
 import React from "react";
-import { Platform, StyleSheet, TouchableOpacity, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useBoniface } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
-function CenterTabButton({ onPress }: { onPress?: (...args: any[]) => void }) {
+function CenterTabButton({
+  onPress,
+  label,
+}: {
+  onPress?: (...args: any[]) => void;
+  label: string;
+}) {
   const colors = useColors();
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.85}
       style={styles.centerBtn}
+      accessibilityRole="button"
+      accessibilityLabel={label}
     >
       <View style={[styles.centerBtnInner, { backgroundColor: colors.primary, shadowColor: colors.primary }]}>
-        <Feather name="zap" size={26} color={colors.primaryForeground} />
+        <Feather name="zap" size={24} color={colors.primaryForeground} />
       </View>
+      <Text style={[styles.centerLabel, { color: colors.primary }]} numberOfLines={1}>
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -58,8 +69,8 @@ export default function TabLayout() {
             <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]} />
           ),
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontFamily: "Inter_500Medium",
+          fontSize: 11,
+          fontFamily: "Inter_600SemiBold",
           marginBottom: 2,
         },
       }}
@@ -91,9 +102,12 @@ export default function TabLayout() {
       <Tabs.Screen
         name="quick"
         options={{
-          title: "",
+          title: tr.tabs.quick,
           tabBarButton: (props) => (
-            <CenterTabButton onPress={props.onPress ?? undefined} />
+            <CenterTabButton
+              onPress={props.onPress ?? undefined}
+              label={tr.tabs.quick}
+            />
           ),
         }}
       />
@@ -135,18 +149,23 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-end",
-    paddingBottom: 6,
+    paddingBottom: 2,
   },
   centerBtnInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 2,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.45,
     shadowRadius: 12,
     elevation: 10,
+  },
+  centerLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    marginBottom: 2,
   },
 });

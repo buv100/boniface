@@ -19,6 +19,8 @@ import { EndShiftSummaryModal } from "@/components/EndShiftSummaryModal";
 import { ShiftCard } from "@/components/ShiftCard";
 import { StartShiftModal } from "@/components/StartShiftModal";
 import { TipsEntryModal } from "@/components/TipsEntryModal";
+import { VenuePickerModal } from "@/components/VenuePickerModal";
+import { HintBanner, PrimaryButton } from "@/components/ui/EasyUI";
 import {
   DayEntry,
   ShiftEntry,
@@ -46,7 +48,7 @@ export default function DashboardScreen() {
   const { tr } = useLang();
   const { dayEntries, saveDayEntry, employees } = useApp();
   const { shiftState, startShift, endShift, lowStockCount, stopList, checklists } = useBoniface();
-  const { venue, manager } = useAuth();
+  const { venue, manager, subscriptionExpired } = useAuth();
 
   const today = todayString();
   const [selectedDate, setSelectedDate] = useState(today);
@@ -61,6 +63,7 @@ export default function DashboardScreen() {
   const [startShiftModal, setStartShiftModal] = useState(false);
   const [endShiftModal, setEndShiftModal] = useState(false);
   const [tipsModal, setTipsModal] = useState(false);
+  const [venuePicker, setVenuePicker] = useState(false);
 
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -146,7 +149,7 @@ export default function DashboardScreen() {
           <View style={styles.headerLeft}>
             <TouchableOpacity
               style={styles.venueNameRow}
-              onPress={() => router.navigate("/account")}
+              onPress={() => setVenuePicker(true)}
               activeOpacity={0.7}
             >
               <Text style={styles.venueName} numberOfLines={1}>{venueName}</Text>
@@ -156,6 +159,12 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={[styles.alertBtn, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}
+              onPress={() => router.navigate("/search" as any)}
+            >
+              <Feather name="search" size={14} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
             {lowStockCount > 0 && (
               <TouchableOpacity
                 style={[styles.alertBtn, { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.25)" }]}
@@ -174,12 +183,20 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {subscriptionExpired && (
+          <View style={{ backgroundColor: "#EF444418", borderColor: "#EF444433", borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+            <Text style={{ color: "#F87171", fontFamily: "Inter_500Medium", fontSize: 13 }}>
+              {tr.subscription.expiredWarning}
+            </Text>
+          </View>
+        )}
+
         {/* ── Smart Hero Panel (3 phases) ── */}
         {!shiftState.active ? (
           /* PHASE 1: No shift — checklist readiness */
           <View style={[styles.heroCardDark, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.heroRow}>
-              <Text style={[styles.heroEyebrowDark, { color: colors.mutedForeground }]}>ДО СМЕНЫ</Text>
+              <Text style={[styles.heroEyebrowDark, { color: colors.primary }]}>{tr.home.phaseBefore}</Text>
               <Text style={[styles.heroTitleDark, { color: colors.foreground }]}>{timeStr}</Text>
               <Text style={[styles.heroSubDark, { color: colors.mutedForeground }]}>{dateLabel}</Text>
             </View>
@@ -194,8 +211,8 @@ export default function DashboardScreen() {
                   />
                   <Text style={[styles.clProgressLabel, { color: colors.foreground }]}>
                     {checklistDoneCount === totalChecklistItems
-                      ? "Всё готово к открытию!"
-                      : `Задачи открытия: ${checklistDoneCount} / ${totalChecklistItems}`}
+                      ? tr.home.readyOpen
+                      : tr.home.openTasksProgress(checklistDoneCount, totalChecklistItems)}
                   </Text>
                 </View>
                 <View style={[styles.clTrack, { backgroundColor: "rgba(255,255,255,0.08)" }]}>
@@ -217,14 +234,14 @@ export default function DashboardScreen() {
               </View>
             )}
 
-            <TouchableOpacity
-              style={[styles.heroStartBtn, { backgroundColor: colors.primary }]}
+            <HintBanner text={tr.home.hintBefore} icon="play-circle" />
+
+            <PrimaryButton
+              label={tr.home.startShift}
+              icon="play-circle"
               onPress={() => setStartShiftModal(true)}
-              activeOpacity={0.85}
-            >
-              <Feather name="play-circle" size={16} color={colors.primaryForeground} />
-              <Text style={[styles.heroStartBtnText, { color: colors.primaryForeground }]}>{tr.home.startShift}</Text>
-            </TouchableOpacity>
+              style={{ marginTop: 14 }}
+            />
           </View>
         ) : totalTips === 0 ? (
           /* PHASE 2: Shift active, no tips — team & ops */
@@ -235,7 +252,7 @@ export default function DashboardScreen() {
             style={styles.heroCard}
           >
             <View style={styles.heroShine} />
-            <Text style={styles.heroEyebrow}>СМЕНА ИДЁТ</Text>
+            <Text style={styles.heroEyebrow}>{tr.home.phaseActive}</Text>
             <Text style={styles.heroTimerLarge}>
               {shiftState.startTime ? getShiftDuration(shiftState.startTime) : timeStr}
             </Text>
@@ -261,17 +278,30 @@ export default function DashboardScreen() {
                 {lowStockCount > 0 && (
                   <View style={styles.heroOpsBadge}>
                     <Feather name="alert-triangle" size={11} color="rgba(0,0,0,0.65)" />
-                    <Text style={styles.heroOpsBadgeText}>{lowStockCount} мало</Text>
+                    <Text style={styles.heroOpsBadgeText}>{lowStockCount} {tr.home.stockLowWord}</Text>
                   </View>
                 )}
                 {openTasksCount > 0 && (
                   <View style={styles.heroOpsBadge}>
                     <Feather name="check-square" size={11} color="rgba(0,0,0,0.65)" />
-                    <Text style={styles.heroOpsBadgeText}>{openTasksCount} задач</Text>
+                    <Text style={styles.heroOpsBadgeText}>{openTasksCount} {tr.home.tasksLabel}</Text>
                   </View>
                 )}
               </View>
             )}
+
+            <Text style={styles.heroHintOnGold}>{tr.home.hintActive}</Text>
+
+            <TouchableOpacity
+              style={styles.heroSecondaryOnGold}
+              onPress={() => setTipsModal(true)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={tr.home.enterTips}
+            >
+              <Feather name="dollar-sign" size={16} color="#111827" />
+              <Text style={styles.heroSecondaryOnGoldText}>{tr.home.enterTips}</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.heroEndBtn} onPress={() => setEndShiftModal(true)} activeOpacity={0.8}>
               <Feather name="stop-circle" size={14} color="#F59E0B" />
@@ -287,7 +317,7 @@ export default function DashboardScreen() {
             style={styles.heroCard}
           >
             <View style={styles.heroShine} />
-            <Text style={styles.heroEyebrow}>ЧАЕВЫЕ ЗА СМЕНУ</Text>
+            <Text style={styles.heroEyebrow}>{tr.home.phaseTips}</Text>
             <Text style={styles.heroAmount}>{`₪${totalTips.toLocaleString()}`}</Text>
             <Text style={styles.heroShiftMeta}>
               {tr.home.shiftActive} · {shiftState.startTime ? getShiftDuration(shiftState.startTime) : timeStr}
@@ -304,6 +334,8 @@ export default function DashboardScreen() {
                 </View>
               ))}
             </View>
+
+            <Text style={styles.heroHintOnGold}>{tr.home.hintAfterTips}</Text>
 
             <TouchableOpacity style={styles.heroEndBtn} onPress={() => setEndShiftModal(true)} activeOpacity={0.8}>
               <Feather name="stop-circle" size={14} color="#F59E0B" />
@@ -322,7 +354,7 @@ export default function DashboardScreen() {
               <View style={styles.goalHeader}>
                 <Feather name="target" size={14} color={reached ? "#10B981" : "#F59E0B"} />
                 <Text style={[styles.goalTitle, { color: reached ? "#10B981" : colors.foreground }]}>
-                  {reached ? "🎯 Цель достигнута!" : "Цель смены"}
+                  {reached ? tr.home.goalReached : tr.home.goalTitle}
                 </Text>
                 <Text style={[styles.goalAmount, { color: reached ? "#10B981" : "#F59E0B" }]}>
                   {totalTips.toLocaleString()} / {goal.toLocaleString()} ₪
@@ -367,7 +399,7 @@ export default function DashboardScreen() {
             <Text style={[styles.statValue, lowStockCount > 0 && { color: "#FB923C" }]}>{lowStockCount}</Text>
             <Text style={styles.statLabel}>{tr.home.stock}</Text>
             <Text style={[styles.statSub, { color: lowStockCount > 0 ? "#FB923C" : "rgba(255,255,255,0.3)" }]}>
-              {lowStockCount > 0 ? "low" : "OK"}
+              {lowStockCount > 0 ? tr.home.stockLowWord : tr.home.stockOk}
             </Text>
           </TouchableOpacity>
 
@@ -379,9 +411,9 @@ export default function DashboardScreen() {
           >
             <Feather name="check-square" size={16} color="rgba(255,255,255,0.45)" />
             <Text style={styles.statValue}>{openTasksCount}</Text>
-            <Text style={styles.statLabel}>tasks</Text>
+            <Text style={styles.statLabel}>{tr.home.tasksLabel}</Text>
             <Text style={[styles.statSub, { color: "rgba(255,255,255,0.3)" }]}>
-              {openTasksCount > 0 ? "open" : "done"}
+              {openTasksCount > 0 ? tr.home.tasksOpen : tr.home.tasksDone}
             </Text>
           </TouchableOpacity>
         </View>
@@ -433,7 +465,7 @@ export default function DashboardScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.stopListTitle}>
-                Stop-list · {stopList.length} {stopList.length === 1 ? "item" : "items"}
+                {tr.home.stopListTitle(stopList.length)}
               </Text>
               <Text style={styles.stopListSub} numberOfLines={1}>
                 {stopList.map((s) => s.name).join(", ")}
@@ -541,7 +573,9 @@ export default function DashboardScreen() {
       <TipsEntryModal
         visible={tipsModal}
         onClose={() => setTipsModal(false)}
+        date={selectedDate}
       />
+      <VenuePickerModal visible={venuePicker} onClose={() => setVenuePicker(false)} />
     </View>
   );
 }
@@ -605,6 +639,28 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)", paddingHorizontal: 14, paddingVertical: 9, borderRadius: 11,
   },
   heroEndBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#F59E0B" },
+  heroHintOnGold: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "rgba(17,24,39,0.72)",
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  heroSecondaryOnGold: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "rgba(17,24,39,0.12)",
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  heroSecondaryOnGoldText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: "#111827",
+  },
 
   // Hero card — inactive (dark)
   heroCardDark: { borderRadius: 24, padding: 20, marginBottom: 14, borderWidth: 1 },

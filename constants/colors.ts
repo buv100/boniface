@@ -31,7 +31,16 @@ const colors = {
     warning: "#F59E0B",
   },
 
-  radius: 12,
+  /** Keep brand; use for consistent, easier touch targets & type scale */
+  radius: 14,
+  space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 },
+  type: {
+    caption: 12,
+    body: 15,
+    title: 18,
+    hero: 28,
+  },
+  touchMin: 48,
 };
 
 export default colors;

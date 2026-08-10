@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React from "react";
 import {
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,9 +14,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useApp } from "@/context/AppContext";
-import { useBoniface } from "@/context/BonifaceContext";
+import { getLocalizedChecklist, useBoniface } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
+import { buildBriefingShareText, shareText } from "@/utils/exportCsv";
 
 const STAFF_COLORS = ["#F59E0B", "#A78BFA", "#38BDF8", "#4ADE80", "#FB923C", "#F472B6"];
 
@@ -35,15 +37,40 @@ export default function BriefingScreen() {
 
   const shiftEmployees = employees.filter((e) => shiftState.employeeIds.includes(e.id));
 
-  const openTasks = checklists.flatMap((cl) =>
+  const localized = checklists.map((cl) => getLocalizedChecklist(cl, tr));
+  const openTasks = localized.flatMap((cl) =>
     cl.items.filter((i) => !i.done).map((i) => ({ text: i.text, checklist: cl.title }))
   );
-  const doneTasks = checklists.flatMap((cl) =>
+  const doneTasks = localized.flatMap((cl) =>
     cl.items.filter((i) => i.done).map((i) => ({ text: i.text, checklist: cl.title }))
   );
 
-  const handleSend = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const handleSend = async () => {
+    try {
+      const text = buildBriefingShareText({
+        title: tr.briefing.shareTitle,
+        dateLabel,
+        timeStr,
+        shiftLine: shiftState.active
+          ? tr.briefing.shiftOpen(shiftState.startTime ?? timeStr, shiftEmployees.length)
+          : tr.briefing.shiftNotOpen,
+        teamLabel: tr.briefing.teamToday,
+        teamNames: shiftEmployees.map((e) => e.name),
+        tasksLabel: tr.briefing.tasksTitle,
+        openTasks: openTasks.slice(0, 8).map((t) => t.text),
+        doneTasks: doneTasks.slice(0, 4).map((t) => t.text),
+        stopLabel: tr.briefing.stopList,
+        stopNames: stopList.map((s) => s.name),
+        emptyTeam: tr.briefing.emptyTeamShare,
+        emptyTasks: tr.briefing.noTasks,
+        emptyStop: tr.briefing.emptyStopShare,
+      });
+      await shareText(text, tr.briefing.shareTitle);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert(tr.briefing.title, e?.message ?? "Share failed");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   return (
@@ -52,7 +79,6 @@ export default function BriefingScreen() {
         contentContainerStyle={[styles.scroll, { paddingTop: topPad + 12, paddingBottom: bottomPad }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={[styles.backBtn, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.09)" }]}
@@ -62,34 +88,32 @@ export default function BriefingScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>{dateLabel} · {timeStr}</Text>
-            <Text style={styles.headerTitle}>Бриф перед сменой</Text>
+            <Text style={styles.headerTitle}>{tr.briefing.title}</Text>
           </View>
           <TouchableOpacity
             style={[styles.templateBtn, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.09)" }]}
           >
-            <Text style={styles.templateBtnText}>Шаблон</Text>
+            <Text style={styles.templateBtnText}>{tr.briefing.template}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Shift info */}
         <View style={[styles.card, { backgroundColor: "rgba(255,255,255,0.055)", borderColor: "rgba(255,255,255,0.09)" }]}>
           <View style={[styles.cardIconBox, { backgroundColor: "rgba(245,158,11,0.15)", borderColor: "rgba(245,158,11,0.2)" }]}>
             <Feather name="calendar" size={18} color="#F59E0B" />
           </View>
           <View>
-            <Text style={styles.cardTitle}>Смена сегодня</Text>
+            <Text style={styles.cardTitle}>{tr.briefing.shiftToday}</Text>
             <Text style={styles.cardSub}>
               {shiftState.active
-                ? `Открыта с ${shiftState.startTime ?? timeStr} · ${shiftEmployees.length} чел.`
-                : "Смена ещё не открыта"}
+                ? tr.briefing.shiftOpen(shiftState.startTime ?? timeStr, shiftEmployees.length)
+                : tr.briefing.shiftNotOpen}
             </Text>
           </View>
         </View>
 
-        {/* Team */}
         {shiftEmployees.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Команда сегодня</Text>
+            <Text style={styles.sectionLabel}>{tr.briefing.teamToday}</Text>
             <View style={styles.teamGrid}>
               {shiftEmployees.map((emp, i) => {
                 const color = STAFF_COLORS[i % STAFF_COLORS.length];
@@ -111,30 +135,28 @@ export default function BriefingScreen() {
           </View>
         )}
 
-        {/* Important */}
         <View style={[styles.sectionCard, { backgroundColor: "rgba(255,255,255,0.045)", borderColor: "rgba(255,255,255,0.07)" }]}>
           <View style={styles.sectionCardHeader}>
             <Feather name="zap" size={14} color="#F59E0B" />
-            <Text style={[styles.sectionCardTitle, { color: "#F59E0B" }]}>Важное на сегодня</Text>
+            <Text style={[styles.sectionCardTitle, { color: "#F59E0B" }]}>{tr.briefing.importantToday}</Text>
           </View>
           {shiftState.active ? (
             <View style={styles.bulletRow}>
               <View style={[styles.bullet, { backgroundColor: "#F59E0B" }]} />
-              <Text style={styles.bulletText}>Смена открыта. Проверьте стоп-лист и склад.</Text>
+              <Text style={styles.bulletText}>{tr.briefing.importantActive}</Text>
             </View>
           ) : (
-            <Text style={styles.emptyNote}>Откройте смену, чтобы начать работу.</Text>
+            <Text style={styles.emptyNote}>{tr.briefing.openShiftHint}</Text>
           )}
         </View>
 
-        {/* Tasks */}
         <View style={[styles.sectionCard, { backgroundColor: "rgba(255,255,255,0.045)", borderColor: "rgba(255,255,255,0.07)" }]}>
           <View style={styles.sectionCardHeader}>
             <Feather name="check-square" size={14} color="#4ADE80" />
-            <Text style={[styles.sectionCardTitle, { color: "#4ADE80" }]}>Задачи на смену</Text>
+            <Text style={[styles.sectionCardTitle, { color: "#4ADE80" }]}>{tr.briefing.tasksTitle}</Text>
           </View>
           {[...openTasks.slice(0, 5), ...doneTasks.slice(0, 3)].length === 0 ? (
-            <Text style={styles.emptyNote}>Нет активных задач</Text>
+            <Text style={styles.emptyNote}>{tr.briefing.noTasks}</Text>
           ) : (
             <View style={{ gap: 8 }}>
               {openTasks.slice(0, 4).map((t, i) => (
@@ -155,12 +177,11 @@ export default function BriefingScreen() {
           )}
         </View>
 
-        {/* Stop list */}
         {stopList.length > 0 && (
           <View style={[styles.sectionCard, { backgroundColor: "rgba(255,255,255,0.045)", borderColor: "rgba(255,255,255,0.07)" }]}>
             <View style={styles.sectionCardHeader}>
               <Feather name="x-circle" size={14} color="#F87171" />
-              <Text style={[styles.sectionCardTitle, { color: "#F87171" }]}>Стоп-лист</Text>
+              <Text style={[styles.sectionCardTitle, { color: "#F87171" }]}>{tr.briefing.stopList}</Text>
             </View>
             <View style={styles.tagRow}>
               {stopList.map((s) => (
@@ -172,12 +193,11 @@ export default function BriefingScreen() {
           </View>
         )}
 
-        {/* Send button */}
         <TouchableOpacity style={styles.sendBtn} onPress={handleSend} activeOpacity={0.85}>
           <Feather name="send" size={16} color="#111827" />
-          <Text style={styles.sendBtnText}>Отправить команде</Text>
+          <Text style={styles.sendBtnText}>{tr.briefing.sendTeam}</Text>
         </TouchableOpacity>
-        <Text style={styles.sendHint}>WhatsApp + уведомление в приложении</Text>
+        <Text style={styles.sendHint}>{tr.briefing.sendHint}</Text>
       </ScrollView>
     </View>
   );

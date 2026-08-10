@@ -21,7 +21,7 @@ interface LangContextType {
 const LangContext = createContext<LangContextType | null>(null);
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("en");
+  const [lang, setLangState] = useState<Lang>("he");
 
   useEffect(() => {
     AsyncStorage.getItem(LANG_KEY).then((v) => {

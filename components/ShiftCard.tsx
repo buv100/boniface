@@ -66,7 +66,7 @@ export function ShiftCard({ result, onEdit, onDelete }: ShiftCardProps) {
               <View style={[styles.timeRow, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
                 <Feather name="clock" size={12} color={colors.mutedForeground} />
                 <Text style={[styles.subText, { color: colors.mutedForeground }]}>
-                  {shift.startTime} — {shift.endTime} · {hoursWorked.toFixed(1)} {tr.card.modeHours === "שעות" ? "ש׳" : tr.card.modeHours === "hours" ? "h" : "ч"}
+                  {shift.startTime} — {shift.endTime} · {hoursWorked.toFixed(1)} {tr.card.hoursAbbrev}
                 </Text>
               </View>
             )}

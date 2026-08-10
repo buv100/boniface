@@ -4,9 +4,13 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
+
+import { apiCall } from "@/lib/api";
 import { generateId, todayString } from "./AppContext";
+import { useAuth } from "./AuthContext";
 
 export type StockCategory =
   | "spirits"
@@ -15,6 +19,9 @@ export type StockCategory =
   | "mixers"
   | "garnish"
   | "supplies";
+
+/** Optional placement / zone for bar stock filtering. */
+export type StockSubCategory = "display" | "speedbar" | "storage" | "custom";
 
 export interface StockItem {
   id: string;
@@ -27,6 +34,8 @@ export interface StockItem {
   portionsPerUnit?: number;
   sellingPrice?: number;
   expiryDate?: string;
+  /** Optional zone: display | speedbar | storage | custom */
+  subCategory?: StockSubCategory;
 }
 
 export interface StopListItem {
@@ -61,24 +70,35 @@ export interface Checklist {
   createdAt: string;
 }
 
+export interface HappyHour {
+  id: string;
+  startTime: string;
+  endTime: string;
+  discountPercent: number;
+  enabled: boolean;
+}
+
 const STOCK_KEY = "@boniface_stock_v1";
 const SHIFT_KEY = "@boniface_shift_v2";
 const CHECKLISTS_KEY = "@boniface_checklists_v1";
 const PREMIUM_KEY = "@boniface_premium_v1";
 const STOPLIST_KEY = "@boniface_stoplist_v1";
 const WRITEOFFS_KEY = "@boniface_writeoffs_v1";
+const HAPPY_HOURS_KEY = "@boniface_happy_hours_v1";
+
+const SYNC_DEBOUNCE_MS = 800;
 
 const DEFAULT_STOCK: StockItem[] = [
-  { id: "s1", name: "Виски Jack Daniel's", category: "spirits", quantity: 5, unit: "бут.", minQuantity: 2 },
-  { id: "s2", name: "Водка Absolut", category: "spirits", quantity: 8, unit: "бут.", minQuantity: 3 },
-  { id: "s3", name: "Джин Tanqueray", category: "spirits", quantity: 4, unit: "бут.", minQuantity: 2 },
-  { id: "s4", name: "Ром Bacardi White", category: "spirits", quantity: 3, unit: "бут.", minQuantity: 2 },
-  { id: "s5", name: "Вино Pinot Grigio", category: "wine", quantity: 6, unit: "бут.", minQuantity: 3 },
-  { id: "s6", name: "Вино Merlot", category: "wine", quantity: 4, unit: "бут.", minQuantity: 2 },
+  { id: "s1", name: "Виски Jack Daniel's", category: "spirits", quantity: 5, unit: "бут.", minQuantity: 2, subCategory: "speedbar" },
+  { id: "s2", name: "Водка Absolut", category: "spirits", quantity: 8, unit: "бут.", minQuantity: 3, subCategory: "speedbar" },
+  { id: "s3", name: "Джин Tanqueray", category: "spirits", quantity: 4, unit: "бут.", minQuantity: 2, subCategory: "display" },
+  { id: "s4", name: "Ром Bacardi White", category: "spirits", quantity: 3, unit: "бут.", minQuantity: 2, subCategory: "storage" },
+  { id: "s5", name: "Вино Pinot Grigio", category: "wine", quantity: 6, unit: "бут.", minQuantity: 3, subCategory: "display" },
+  { id: "s6", name: "Вино Merlot", category: "wine", quantity: 4, unit: "бут.", minQuantity: 2, subCategory: "storage" },
   { id: "s7", name: "Пиво Goldstar 0.5", category: "beer", quantity: 48, unit: "шт.", minQuantity: 24 },
   { id: "s8", name: "Пиво Carlsberg", category: "beer", quantity: 24, unit: "шт.", minQuantity: 12 },
-  { id: "s9", name: "Tonic Fever-Tree", category: "mixers", quantity: 18, unit: "шт.", minQuantity: 12 },
-  { id: "s10", name: "Coca-Cola 0.33", category: "mixers", quantity: 24, unit: "шт.", minQuantity: 18 },
+  { id: "s9", name: "Tonic Fever-Tree", category: "mixers", quantity: 18, unit: "шт.", minQuantity: 12, subCategory: "speedbar" },
+  { id: "s10", name: "Coca-Cola 0.33", category: "mixers", quantity: 24, unit: "шт.", minQuantity: 18, subCategory: "speedbar" },
   { id: "s11", name: "Содовая", category: "mixers", quantity: 12, unit: "шт.", minQuantity: 6 },
   { id: "s12", name: "Лайм", category: "garnish", quantity: 1, unit: "кг", minQuantity: 2 },
   { id: "s13", name: "Мята свежая", category: "garnish", quantity: 2, unit: "пуч.", minQuantity: 2 },
@@ -143,9 +163,13 @@ interface BonifaceContextType {
   shiftState: ShiftState;
   stopList: StopListItem[];
   writeOffs: WriteOff[];
+  happyHours: HappyHour[];
   isLoading: boolean;
+  isSyncing: boolean;
   lowStockCount: number;
   isPremium: boolean;
+  isHappyHourActive: boolean;
+  activeHappyHour: HappyHour | null;
   setPremium: (val: boolean) => Promise<void>;
   startShift: (employeeIds: string[], tipsGoal?: number) => Promise<void>;
   endShift: () => Promise<void>;
@@ -164,36 +188,138 @@ interface BonifaceContextType {
   clearStopList: () => Promise<void>;
   addWriteOff: (writeOff: Omit<WriteOff, "id">) => Promise<void>;
   deleteWriteOff: (id: string) => Promise<void>;
+  setHappyHours: (hours: HappyHour[]) => Promise<void>;
+  upsertHappyHour: (hour: HappyHour) => Promise<void>;
+  removeHappyHour: (id: string) => Promise<void>;
 }
 
 const BonifaceContext = createContext<BonifaceContextType | null>(null);
 
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/** True if now is within start–end (supports overnight ranges). */
+export function isHappyHourNow(hour: HappyHour, now = new Date()): boolean {
+  if (!hour.enabled) return false;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const start = timeToMinutes(hour.startTime);
+  const end = timeToMinutes(hour.endTime);
+  if (end <= start) return cur >= start || cur < end;
+  return cur >= start && cur < end;
+}
+
+function mapRemoteStock(r: StockItem): StockItem {
+  return {
+    id: r.id,
+    name: r.name,
+    category: r.category as StockCategory,
+    quantity: r.quantity,
+    unit: r.unit,
+    minQuantity: r.minQuantity,
+    purchasePrice: r.purchasePrice ?? undefined,
+    portionsPerUnit: r.portionsPerUnit ?? undefined,
+    sellingPrice: r.sellingPrice ?? undefined,
+    expiryDate: r.expiryDate ?? undefined,
+    subCategory: r.subCategory ?? undefined,
+  };
+}
+
+function mapRemoteStop(r: StopListItem): StopListItem {
+  return {
+    id: r.id,
+    name: r.name,
+    reason: r.reason ?? undefined,
+    addedAt: r.addedAt,
+  };
+}
+
+function mapRemoteWriteOff(r: WriteOff): WriteOff {
+  return {
+    id: r.id,
+    date: r.date,
+    itemId: r.itemId ?? undefined,
+    itemName: r.itemName,
+    quantity: r.quantity,
+    unit: r.unit,
+    reason: r.reason,
+    notes: r.notes ?? undefined,
+  };
+}
+
+function mapRemoteChecklist(r: Checklist): Checklist {
+  return {
+    id: r.id,
+    title: r.title,
+    type: r.type as Checklist["type"],
+    items: r.items ?? [],
+    createdAt: r.createdAt,
+  };
+}
+
 export function BonifaceProvider({ children }: { children: React.ReactNode }) {
+  const { token, isLoading: authLoading } = useAuth();
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
-  const [shiftState, setShiftState] = useState<ShiftState>({ active: false, startTime: null, startDate: null, employeeIds: [] });
+  const [shiftState, setShiftState] = useState<ShiftState>({
+    active: false,
+    startTime: null,
+    startDate: null,
+    employeeIds: [],
+  });
   const [stopList, setStopList] = useState<StopListItem[]>([]);
   const [writeOffs, setWriteOffs] = useState<WriteOff[]>([]);
+  const [happyHours, setHappyHoursState] = useState<HappyHour[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  const prevTokenRef = useRef<string | null | undefined>(undefined);
+  const hydrateSkipRef = useRef(false);
+  const syncTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const tokenRef = useRef<string | null>(null);
+  tokenRef.current = token;
+
+  // Refresh happy-hour active state every minute
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
+    if (authLoading) return;
     const load = async () => {
       try {
-        const [stockData, shiftData, checklistData, premiumData, stopData, writeOffData] = await Promise.all([
+        const [
+          stockData,
+          shiftData,
+          checklistData,
+          premiumData,
+          stopData,
+          writeOffData,
+          happyData,
+        ] = await Promise.all([
           AsyncStorage.getItem(STOCK_KEY),
           AsyncStorage.getItem(SHIFT_KEY),
           AsyncStorage.getItem(CHECKLISTS_KEY),
           AsyncStorage.getItem(PREMIUM_KEY),
           AsyncStorage.getItem(STOPLIST_KEY),
           AsyncStorage.getItem(WRITEOFFS_KEY),
+          AsyncStorage.getItem(HAPPY_HOURS_KEY),
         ]);
         setStockItems(stockData ? JSON.parse(stockData) : DEFAULT_STOCK);
-        setShiftState(shiftData ? JSON.parse(shiftData) : { active: false, startTime: null, startDate: null, employeeIds: [] });
+        setShiftState(
+          shiftData
+            ? JSON.parse(shiftData)
+            : { active: false, startTime: null, startDate: null, employeeIds: [] }
+        );
         setChecklists(checklistData ? JSON.parse(checklistData) : DEFAULT_CHECKLISTS);
         setIsPremium(premiumData === "true");
         setStopList(stopData ? JSON.parse(stopData) : []);
         setWriteOffs(writeOffData ? JSON.parse(writeOffData) : []);
+        setHappyHoursState(happyData ? JSON.parse(happyData) : []);
       } catch {
         setStockItems(DEFAULT_STOCK);
         setChecklists(DEFAULT_CHECKLISTS);
@@ -202,22 +328,130 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
       }
     };
     load();
+  }, [authLoading]);
+
+  // Hydrate from API on login / session restore
+  useEffect(() => {
+    if (authLoading || isLoading) return;
+    if (prevTokenRef.current === token) return;
+    prevTokenRef.current = token;
+    if (!token) return;
+
+    const hydrate = async () => {
+      setIsSyncing(true);
+      hydrateSkipRef.current = true;
+      try {
+        const [remoteStock, remoteStop, remoteWriteOffs, remoteChecklists] =
+          await Promise.all([
+            apiCall<StockItem[]>("/stock", { token }),
+            apiCall<StopListItem[]>("/stop-list", { token }),
+            apiCall<WriteOff[]>("/write-offs", { token }),
+            apiCall<Checklist[]>("/checklists", { token }),
+          ]);
+
+        const stock = (remoteStock ?? []).map(mapRemoteStock);
+        const stop = (remoteStop ?? []).map(mapRemoteStop);
+        const offs = (remoteWriteOffs ?? []).map(mapRemoteWriteOff);
+        const cls = (remoteChecklists ?? []).map(mapRemoteChecklist);
+
+        const [localStockRaw, localClRaw] = await Promise.all([
+          AsyncStorage.getItem(STOCK_KEY),
+          AsyncStorage.getItem(CHECKLISTS_KEY),
+        ]);
+        const localStock: StockItem[] = localStockRaw
+          ? JSON.parse(localStockRaw)
+          : DEFAULT_STOCK;
+        const localCl: Checklist[] = localClRaw
+          ? JSON.parse(localClRaw)
+          : DEFAULT_CHECKLISTS;
+
+        if (stock.length > 0) {
+          setStockItems(stock);
+          await AsyncStorage.setItem(STOCK_KEY, JSON.stringify(stock));
+        } else if (localStock.length > 0) {
+          // Seed cloud from local cache when venue has no stock yet
+          apiCall("/stock", { method: "PUT", token, body: localStock }).catch(() => {});
+        }
+
+        setStopList(stop);
+        await AsyncStorage.setItem(STOPLIST_KEY, JSON.stringify(stop));
+        setWriteOffs(offs);
+        await AsyncStorage.setItem(WRITEOFFS_KEY, JSON.stringify(offs));
+
+        if (cls.length > 0) {
+          setChecklists(cls);
+          await AsyncStorage.setItem(CHECKLISTS_KEY, JSON.stringify(cls));
+        } else if (localCl.length > 0) {
+          apiCall("/checklists", { method: "PUT", token, body: localCl }).catch(() => {});
+        }
+      } catch {
+        // Offline / API down — keep AsyncStorage cache
+      } finally {
+        setIsSyncing(false);
+        setTimeout(() => {
+          hydrateSkipRef.current = false;
+        }, 50);
+      }
+    };
+    hydrate();
+  }, [token, authLoading, isLoading]);
+
+  const scheduleCloudPut = useCallback(
+    (key: "stock" | "stop-list" | "write-offs" | "checklists", body: unknown) => {
+      if (!tokenRef.current || hydrateSkipRef.current) return;
+      const existing = syncTimers.current[key];
+      if (existing) clearTimeout(existing);
+      syncTimers.current[key] = setTimeout(() => {
+        const t = tokenRef.current;
+        if (!t) return;
+        apiCall(`/${key}`, { method: "PUT", token: t, body }).catch(() => {
+          // fail soft when offline
+        });
+      }, SYNC_DEBOUNCE_MS);
+    },
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      Object.values(syncTimers.current).forEach(clearTimeout);
+    };
   }, []);
 
-  const saveStock = useCallback(async (data: StockItem[]) => {
-    await AsyncStorage.setItem(STOCK_KEY, JSON.stringify(data));
-  }, []);
+  const saveStock = useCallback(
+    async (data: StockItem[]) => {
+      await AsyncStorage.setItem(STOCK_KEY, JSON.stringify(data));
+      scheduleCloudPut("stock", data);
+    },
+    [scheduleCloudPut]
+  );
 
-  const saveChecklists = useCallback(async (data: Checklist[]) => {
-    await AsyncStorage.setItem(CHECKLISTS_KEY, JSON.stringify(data));
-  }, []);
+  const saveChecklists = useCallback(
+    async (data: Checklist[]) => {
+      await AsyncStorage.setItem(CHECKLISTS_KEY, JSON.stringify(data));
+      scheduleCloudPut("checklists", data);
+    },
+    [scheduleCloudPut]
+  );
 
-  const saveStopList = useCallback(async (data: StopListItem[]) => {
-    await AsyncStorage.setItem(STOPLIST_KEY, JSON.stringify(data));
-  }, []);
+  const saveStopList = useCallback(
+    async (data: StopListItem[]) => {
+      await AsyncStorage.setItem(STOPLIST_KEY, JSON.stringify(data));
+      scheduleCloudPut("stop-list", data);
+    },
+    [scheduleCloudPut]
+  );
 
-  const saveWriteOffs = useCallback(async (data: WriteOff[]) => {
-    await AsyncStorage.setItem(WRITEOFFS_KEY, JSON.stringify(data));
+  const saveWriteOffs = useCallback(
+    async (data: WriteOff[]) => {
+      await AsyncStorage.setItem(WRITEOFFS_KEY, JSON.stringify(data));
+      scheduleCloudPut("write-offs", data);
+    },
+    [scheduleCloudPut]
+  );
+
+  const saveHappyHoursLocal = useCallback(async (data: HappyHour[]) => {
+    await AsyncStorage.setItem(HAPPY_HOURS_KEY, JSON.stringify(data));
   }, []);
 
   const setPremium = useCallback(async (val: boolean) => {
@@ -229,172 +463,315 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
     const now = new Date();
     const h = String(now.getHours()).padStart(2, "0");
     const m = String(now.getMinutes()).padStart(2, "0");
-    const state: ShiftState = { active: true, startTime: `${h}:${m}`, startDate: todayString(), employeeIds, tipsGoal };
+    const state: ShiftState = {
+      active: true,
+      startTime: `${h}:${m}`,
+      startDate: todayString(),
+      employeeIds,
+      tipsGoal,
+    };
     setShiftState(state);
     await AsyncStorage.setItem(SHIFT_KEY, JSON.stringify(state));
   }, []);
 
-  const addChecklist = useCallback(async (title: string) => {
-    const newCl: Checklist = { id: generateId(), title: title.trim(), type: "custom", items: [], createdAt: todayString() };
-    setChecklists((prev) => { const updated = [...prev, newCl]; saveChecklists(updated); return updated; });
-  }, [saveChecklists]);
+  const addChecklist = useCallback(
+    async (title: string) => {
+      const newCl: Checklist = {
+        id: generateId(),
+        title: title.trim(),
+        type: "custom",
+        items: [],
+        createdAt: todayString(),
+      };
+      setChecklists((prev) => {
+        const updated = [...prev, newCl];
+        saveChecklists(updated);
+        return updated;
+      });
+    },
+    [saveChecklists]
+  );
 
-  const deleteChecklist = useCallback(async (id: string) => {
-    setChecklists((prev) => { const updated = prev.filter((cl) => cl.id !== id); saveChecklists(updated); return updated; });
-  }, [saveChecklists]);
+  const deleteChecklist = useCallback(
+    async (id: string) => {
+      setChecklists((prev) => {
+        const updated = prev.filter((cl) => cl.id !== id);
+        saveChecklists(updated);
+        return updated;
+      });
+    },
+    [saveChecklists]
+  );
 
-  const addChecklistItem = useCallback(async (checklistId: string, text: string) => {
-    setChecklists((prev) => {
-      const updated = prev.map((cl) =>
-        cl.id === checklistId
-          ? { ...cl, items: [...cl.items, { id: generateId(), text: text.trim(), done: false }] }
-          : cl
-      );
-      saveChecklists(updated);
-      return updated;
-    });
-  }, [saveChecklists]);
+  const addChecklistItem = useCallback(
+    async (checklistId: string, text: string) => {
+      setChecklists((prev) => {
+        const updated = prev.map((cl) =>
+          cl.id === checklistId
+            ? { ...cl, items: [...cl.items, { id: generateId(), text: text.trim(), done: false }] }
+            : cl
+        );
+        saveChecklists(updated);
+        return updated;
+      });
+    },
+    [saveChecklists]
+  );
 
-  const deleteChecklistItem = useCallback(async (checklistId: string, itemId: string) => {
-    setChecklists((prev) => {
-      const updated = prev.map((cl) =>
-        cl.id === checklistId ? { ...cl, items: cl.items.filter((i) => i.id !== itemId) } : cl
-      );
-      saveChecklists(updated);
-      return updated;
-    });
-  }, [saveChecklists]);
+  const deleteChecklistItem = useCallback(
+    async (checklistId: string, itemId: string) => {
+      setChecklists((prev) => {
+        const updated = prev.map((cl) =>
+          cl.id === checklistId ? { ...cl, items: cl.items.filter((i) => i.id !== itemId) } : cl
+        );
+        saveChecklists(updated);
+        return updated;
+      });
+    },
+    [saveChecklists]
+  );
 
   const endShift = useCallback(async () => {
-    const state: ShiftState = { active: false, startTime: null, startDate: null, employeeIds: [] };
+    const state: ShiftState = {
+      active: false,
+      startTime: null,
+      startDate: null,
+      employeeIds: [],
+    };
     setShiftState(state);
     setStopList([]);
     await Promise.all([
       AsyncStorage.setItem(SHIFT_KEY, JSON.stringify(state)),
       AsyncStorage.setItem(STOPLIST_KEY, JSON.stringify([])),
     ]);
-  }, []);
+    scheduleCloudPut("stop-list", []);
+  }, [scheduleCloudPut]);
 
-  const updateStockQuantity = useCallback(async (id: string, delta: number) => {
-    setStockItems((prev) => {
-      const updated = prev.map((item) =>
-        item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
-      );
-      saveStock(updated);
-      return updated;
-    });
-  }, [saveStock]);
-
-  const addStockItem = useCallback(async (item: Omit<StockItem, "id">) => {
-    const newItem: StockItem = { ...item, id: generateId() };
-    setStockItems((prev) => {
-      const updated = [...prev, newItem];
-      saveStock(updated);
-      return updated;
-    });
-  }, [saveStock]);
-
-  const updateStockItem = useCallback(async (id: string, updates: Partial<Omit<StockItem, "id">>) => {
-    setStockItems((prev) => {
-      const updated = prev.map((item) => item.id === id ? { ...item, ...updates } : item);
-      saveStock(updated);
-      return updated;
-    });
-  }, [saveStock]);
-
-  const deleteStockItem = useCallback(async (id: string) => {
-    setStockItems((prev) => {
-      const updated = prev.filter((i) => i.id !== id);
-      saveStock(updated);
-      return updated;
-    });
-  }, [saveStock]);
-
-  const toggleChecklistItem = useCallback(async (checklistId: string, itemId: string) => {
-    setChecklists((prev) => {
-      const updated = prev.map((cl) =>
-        cl.id === checklistId
-          ? { ...cl, items: cl.items.map((it) => it.id === itemId ? { ...it, done: !it.done } : it) }
-          : cl
-      );
-      saveChecklists(updated);
-      return updated;
-    });
-  }, [saveChecklists]);
-
-  const resetChecklist = useCallback(async (checklistId: string) => {
-    setChecklists((prev) => {
-      const updated = prev.map((cl) =>
-        cl.id === checklistId
-          ? { ...cl, items: cl.items.map((it) => ({ ...it, done: false })) }
-          : cl
-      );
-      saveChecklists(updated);
-      return updated;
-    });
-  }, [saveChecklists]);
-
-  const addToStopList = useCallback(async (name: string, reason?: string) => {
-    const item: StopListItem = { id: generateId(), name: name.trim(), reason, addedAt: todayString() };
-    setStopList((prev) => {
-      const updated = [...prev, item];
-      saveStopList(updated);
-      return updated;
-    });
-  }, [saveStopList]);
-
-  const removeFromStopList = useCallback(async (id: string) => {
-    setStopList((prev) => {
-      const updated = prev.filter((i) => i.id !== id);
-      saveStopList(updated);
-      return updated;
-    });
-  }, [saveStopList]);
-
-  const clearStopList = useCallback(async () => {
-    setStopList([]);
-    await AsyncStorage.setItem(STOPLIST_KEY, "[]");
-  }, []);
-
-  const addWriteOff = useCallback(async (writeOff: Omit<WriteOff, "id">) => {
-    const newWO: WriteOff = { ...writeOff, id: generateId() };
-    setWriteOffs((prev) => {
-      const updated = [newWO, ...prev];
-      saveWriteOffs(updated);
-      return updated;
-    });
-    if (writeOff.itemId) {
+  const updateStockQuantity = useCallback(
+    async (id: string, delta: number) => {
       setStockItems((prev) => {
         const updated = prev.map((item) =>
-          item.id === writeOff.itemId
-            ? { ...item, quantity: Math.max(0, item.quantity - writeOff.quantity) }
-            : item
+          item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
         );
         saveStock(updated);
         return updated;
       });
-    }
-  }, [saveWriteOffs, saveStock]);
+    },
+    [saveStock]
+  );
 
-  const deleteWriteOff = useCallback(async (id: string) => {
-    setWriteOffs((prev) => {
-      const updated = prev.filter((w) => w.id !== id);
-      saveWriteOffs(updated);
-      return updated;
-    });
-  }, [saveWriteOffs]);
+  const addStockItem = useCallback(
+    async (item: Omit<StockItem, "id">) => {
+      const newItem: StockItem = { ...item, id: generateId() };
+      setStockItems((prev) => {
+        const updated = [...prev, newItem];
+        saveStock(updated);
+        return updated;
+      });
+    },
+    [saveStock]
+  );
+
+  const updateStockItem = useCallback(
+    async (id: string, updates: Partial<Omit<StockItem, "id">>) => {
+      setStockItems((prev) => {
+        const updated = prev.map((item) => (item.id === id ? { ...item, ...updates } : item));
+        saveStock(updated);
+        return updated;
+      });
+    },
+    [saveStock]
+  );
+
+  const deleteStockItem = useCallback(
+    async (id: string) => {
+      setStockItems((prev) => {
+        const updated = prev.filter((i) => i.id !== id);
+        saveStock(updated);
+        return updated;
+      });
+    },
+    [saveStock]
+  );
+
+  const toggleChecklistItem = useCallback(
+    async (checklistId: string, itemId: string) => {
+      setChecklists((prev) => {
+        const updated = prev.map((cl) =>
+          cl.id === checklistId
+            ? {
+                ...cl,
+                items: cl.items.map((it) =>
+                  it.id === itemId ? { ...it, done: !it.done } : it
+                ),
+              }
+            : cl
+        );
+        saveChecklists(updated);
+        return updated;
+      });
+    },
+    [saveChecklists]
+  );
+
+  const resetChecklist = useCallback(
+    async (checklistId: string) => {
+      setChecklists((prev) => {
+        const updated = prev.map((cl) =>
+          cl.id === checklistId
+            ? { ...cl, items: cl.items.map((it) => ({ ...it, done: false })) }
+            : cl
+        );
+        saveChecklists(updated);
+        return updated;
+      });
+    },
+    [saveChecklists]
+  );
+
+  const addToStopList = useCallback(
+    async (name: string, reason?: string) => {
+      const item: StopListItem = {
+        id: generateId(),
+        name: name.trim(),
+        reason,
+        addedAt: todayString(),
+      };
+      setStopList((prev) => {
+        const updated = [...prev, item];
+        saveStopList(updated);
+        return updated;
+      });
+    },
+    [saveStopList]
+  );
+
+  const removeFromStopList = useCallback(
+    async (id: string) => {
+      setStopList((prev) => {
+        const updated = prev.filter((i) => i.id !== id);
+        saveStopList(updated);
+        return updated;
+      });
+    },
+    [saveStopList]
+  );
+
+  const clearStopList = useCallback(async () => {
+    setStopList([]);
+    await AsyncStorage.setItem(STOPLIST_KEY, "[]");
+    scheduleCloudPut("stop-list", []);
+  }, [scheduleCloudPut]);
+
+  const addWriteOff = useCallback(
+    async (writeOff: Omit<WriteOff, "id">) => {
+      const newWO: WriteOff = { ...writeOff, id: generateId() };
+      setWriteOffs((prev) => {
+        const updated = [newWO, ...prev];
+        saveWriteOffs(updated);
+        return updated;
+      });
+      if (writeOff.itemId) {
+        setStockItems((prev) => {
+          const updated = prev.map((item) =>
+            item.id === writeOff.itemId
+              ? { ...item, quantity: Math.max(0, item.quantity - writeOff.quantity) }
+              : item
+          );
+          saveStock(updated);
+          return updated;
+        });
+      }
+    },
+    [saveWriteOffs, saveStock]
+  );
+
+  const deleteWriteOff = useCallback(
+    async (id: string) => {
+      setWriteOffs((prev) => {
+        const updated = prev.filter((w) => w.id !== id);
+        saveWriteOffs(updated);
+        return updated;
+      });
+    },
+    [saveWriteOffs]
+  );
+
+  const setHappyHours = useCallback(
+    async (hours: HappyHour[]) => {
+      setHappyHoursState(hours);
+      await saveHappyHoursLocal(hours);
+    },
+    [saveHappyHoursLocal]
+  );
+
+  const upsertHappyHour = useCallback(
+    async (hour: HappyHour) => {
+      setHappyHoursState((prev) => {
+        const idx = prev.findIndex((h) => h.id === hour.id);
+        const updated =
+          idx >= 0 ? prev.map((h) => (h.id === hour.id ? hour : h)) : [...prev, hour];
+        saveHappyHoursLocal(updated);
+        return updated;
+      });
+    },
+    [saveHappyHoursLocal]
+  );
+
+  const removeHappyHour = useCallback(
+    async (id: string) => {
+      setHappyHoursState((prev) => {
+        const updated = prev.filter((h) => h.id !== id);
+        saveHappyHoursLocal(updated);
+        return updated;
+      });
+    },
+    [saveHappyHoursLocal]
+  );
 
   const lowStockCount = stockItems.filter((i) => i.quantity < i.minQuantity).length;
+  void tick;
+  const activeHappyHour = happyHours.find((h) => isHappyHourNow(h)) ?? null;
+  const isHappyHourActive = !!activeHappyHour;
 
   return (
-    <BonifaceContext.Provider value={{
-      stockItems, checklists, shiftState, stopList, writeOffs, isLoading, lowStockCount,
-      isPremium, setPremium,
-      startShift, endShift, updateStockQuantity, addStockItem, updateStockItem, deleteStockItem,
-      toggleChecklistItem, resetChecklist, addChecklist, deleteChecklist, addChecklistItem, deleteChecklistItem,
-      addToStopList, removeFromStopList, clearStopList,
-      addWriteOff, deleteWriteOff,
-    }}>
+    <BonifaceContext.Provider
+      value={{
+        stockItems,
+        checklists,
+        shiftState,
+        stopList,
+        writeOffs,
+        happyHours,
+        isLoading,
+        isSyncing,
+        lowStockCount,
+        isPremium,
+        isHappyHourActive,
+        activeHappyHour,
+        setPremium,
+        startShift,
+        endShift,
+        updateStockQuantity,
+        addStockItem,
+        updateStockItem,
+        deleteStockItem,
+        toggleChecklistItem,
+        resetChecklist,
+        addChecklist,
+        deleteChecklist,
+        addChecklistItem,
+        deleteChecklistItem,
+        addToStopList,
+        removeFromStopList,
+        clearStopList,
+        addWriteOff,
+        deleteWriteOff,
+        setHappyHours,
+        upsertHappyHour,
+        removeHappyHour,
+      }}
+    >
       {children}
     </BonifaceContext.Provider>
   );
@@ -406,6 +783,7 @@ export function useBoniface() {
   return ctx;
 }
 
+/** @deprecated Prefer `tr.categories` from useLang() for localized labels. */
 export const CATEGORY_LABELS: Record<StockCategory, string> = {
   spirits: "Крепкие",
   wine: "Вина",
@@ -414,6 +792,43 @@ export const CATEGORY_LABELS: Record<StockCategory, string> = {
   garnish: "Гарниры",
   supplies: "Расходники",
 };
+
+type ChecklistDefaultsTr = {
+  checklistDefaults: {
+    opening: { title: string; items: string[] };
+    closing: { title: string; items: string[] };
+    preshift: { title: string; items: string[] };
+  };
+};
+
+/** Localize built-in checklist title/items; custom checklists pass through. */
+export function getLocalizedChecklist(cl: Checklist, tr: ChecklistDefaultsTr): Checklist {
+  if (cl.type === "custom") return cl;
+  const def = tr.checklistDefaults[cl.type];
+  if (!def) return cl;
+  return {
+    ...cl,
+    title: def.title,
+    items: cl.items.map((item, i) => ({
+      ...item,
+      text: def.items[i] ?? item.text,
+    })),
+  };
+}
+
+type SeedStockTr = {
+  seedStock?: Record<string, { name: string; unit: string }>;
+};
+
+/** Localize default seed stock names/units by id (s1–s16). User-added items pass through. */
+export function getLocalizedStockItem<T extends { id: string; name: string; unit: string }>(
+  item: T,
+  tr: SeedStockTr
+): T {
+  const seed = tr.seedStock?.[item.id];
+  if (!seed) return item;
+  return { ...item, name: seed.name, unit: seed.unit };
+}
 
 export const CATEGORY_ICONS: Record<StockCategory, string> = {
   spirits: "droplet",
@@ -434,7 +849,38 @@ export const WRITE_OFF_REASONS = [
   "Другое",
 ];
 
-export function calcBeverageCost(purchasePrice: number, portionsPerUnit: number, sellingPrice: number): number {
+export function calcBeverageCost(
+  purchasePrice: number,
+  portionsPerUnit: number,
+  sellingPrice: number
+): number {
   if (portionsPerUnit <= 0 || sellingPrice <= 0) return 0;
   return (purchasePrice / portionsPerUnit / sellingPrice) * 100;
+}
+
+/** Employee-of-the-month: tips (7d) + shifts; lateFlag discounts if present. */
+export function pickEmployeeOfMonth(
+  scores: {
+    employeeId: string;
+    employeeName: string;
+    tipsLast7: number;
+    shiftsLast7: number;
+    lateFlag?: boolean;
+  }[]
+): { employeeId: string; employeeName: string; tipsLast7: number; shiftsLast7: number } | null {
+  if (scores.length === 0) return null;
+  const ranked = [...scores]
+    .map((s) => ({
+      ...s,
+      score: s.tipsLast7 + s.shiftsLast7 * 40 - (s.lateFlag ? 200 : 0),
+    }))
+    .sort((a, b) => b.score - a.score || b.tipsLast7 - a.tipsLast7 || b.shiftsLast7 - a.shiftsLast7);
+  const top = ranked[0];
+  if (top.tipsLast7 <= 0 && top.shiftsLast7 <= 0) return null;
+  return {
+    employeeId: top.employeeId,
+    employeeName: top.employeeName,
+    tipsLast7: top.tipsLast7,
+    shiftsLast7: top.shiftsLast7,
+  };
 }

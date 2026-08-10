@@ -1,10 +1,22 @@
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const TOKEN_KEY = "@boniface_auth_token";
 
-export const API_BASE = __DEV__
-  ? `https://${process.env.EXPO_PUBLIC_REPLIT_DEV_DOMAIN ?? "localhost"}/api`
-  : `https://${process.env.EXPO_PUBLIC_REPLIT_DOMAIN ?? "localhost"}/api`;
+function resolveApiBase(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (fromEnv) {
+    return fromEnv.replace(/\/+$/, "");
+  }
+  // Local Express API — works for web and simulators when the API runs on the host.
+  // Override with EXPO_PUBLIC_API_URL for physical devices (e.g. http://192.168.x.x:3001/api).
+  if (Platform.OS === "web" || __DEV__) {
+    return "http://localhost:3001/api";
+  }
+  return "http://localhost:3001/api";
+}
+
+export const API_BASE = resolveApiBase();
 
 export async function getStoredToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);

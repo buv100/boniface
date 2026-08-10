@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SmartChecklistModal } from "@/components/SmartChecklistModal";
 import { useAuth } from "@/context/AuthContext";
-import { Checklist, useBoniface } from "@/context/BonifaceContext";
+import { Checklist, getLocalizedChecklist, useBoniface } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { Lang } from "@/lib/translations";
 import { useColors } from "@/hooks/useColors";
@@ -33,7 +33,7 @@ export default function MoreScreen() {
   const { tr } = useLang();
   const { checklists, lowStockCount, toggleChecklistItem, resetChecklist, addChecklist, deleteChecklist, addChecklistItem, deleteChecklistItem } = useBoniface();
   const { lang, setLang } = useLang();
-  const { isLoggedIn, manager, venue } = useAuth();
+  const { isLoggedIn, manager, venue, employee, subscriptionExpired } = useAuth();
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [openChecklist, setOpenChecklist] = useState<string | null>(null);
   const [smartChecklist, setSmartChecklist] = useState<Checklist | null>(null);
@@ -52,6 +52,15 @@ export default function MoreScreen() {
   };
 
   const menuItems = [
+    {
+      id: "search",
+      label: tr.more.searchItem,
+      sub: tr.more.searchDesc,
+      icon: "search",
+      iconColor: "#38BDF8",
+      soon: false,
+      onPress: () => { Haptics.selectionAsync(); router.navigate("/search" as any); },
+    },
     {
       id: "history",
       label: tr.more.historyItem,
@@ -161,6 +170,7 @@ export default function MoreScreen() {
         {openSection === "checklists" && (
           <View style={[styles.checklistExpand, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {checklists.map((cl, clIdx) => {
+              const loc = getLocalizedChecklist(cl, tr);
               const done = cl.items.filter((i) => i.done).length;
               const total = cl.items.length;
               const pct = total > 0 ? (done / total) * 100 : 0;
@@ -181,7 +191,7 @@ export default function MoreScreen() {
                   >
                     <View style={styles.clLeft}>
                       <View style={styles.clTitleRow}>
-                        <Text style={[styles.clTitle, { color: colors.foreground }]}>{cl.title}</Text>
+                        <Text style={[styles.clTitle, { color: colors.foreground }]}>{loc.title}</Text>
                         <View style={styles.clMeta}>
                           {pct === 100 && (
                             <View style={[styles.clDoneBadge, { backgroundColor: "#10B98122" }]}>
@@ -203,9 +213,9 @@ export default function MoreScreen() {
                         style={styles.clDeleteBtn}
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          Alert.alert("Удалить чеклист?", `"${cl.title}" будет удалён навсегда.`, [
-                            { text: "Отмена", style: "cancel" },
-                            { text: "Удалить", style: "destructive", onPress: () => deleteChecklist(cl.id) },
+                          Alert.alert(tr.more.deleteChecklistTitle, tr.more.deleteChecklistMsg(loc.title), [
+                            { text: tr.more.cancel, style: "cancel" },
+                            { text: tr.more.delete, style: "destructive", onPress: () => deleteChecklist(cl.id) },
                           ]);
                         }}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -229,7 +239,7 @@ export default function MoreScreen() {
                         </TouchableOpacity>
                       )}
 
-                      {cl.items.map((item) => (
+                      {loc.items.map((item) => (
                         <TouchableOpacity
                           key={item.id}
                           style={[styles.clItem, { borderBottomColor: colors.border }]}
@@ -254,7 +264,7 @@ export default function MoreScreen() {
                         <View style={[styles.addItemRow, { borderTopColor: colors.border }]}>
                           <TextInput
                             style={[styles.addItemInput, { color: colors.foreground }]}
-                            placeholder="Добавить пункт..."
+                            placeholder={tr.more.addItemPlaceholder}
                             placeholderTextColor={colors.mutedForeground}
                             value={newItemText[cl.id] ?? ""}
                             onChangeText={(t) => setNewItemText((prev) => ({ ...prev, [cl.id]: t }))}
@@ -295,7 +305,7 @@ export default function MoreScreen() {
               <View style={[styles.newClForm, { borderTopColor: colors.border }]}>
                 <TextInput
                   style={[styles.newClInput, { color: colors.foreground, borderColor: colors.border }]}
-                  placeholder="Название чеклиста..."
+                  placeholder={tr.more.newChecklistPlaceholder}
                   placeholderTextColor={colors.mutedForeground}
                   value={newClTitle}
                   onChangeText={setNewClTitle}
@@ -308,7 +318,7 @@ export default function MoreScreen() {
                 />
                 <View style={styles.newClBtns}>
                   <TouchableOpacity style={[styles.newClCancel, { borderColor: colors.border }]} onPress={() => { setAddingCl(false); setNewClTitle(""); }}>
-                    <Text style={[styles.newClCancelText, { color: colors.mutedForeground }]}>Отмена</Text>
+                    <Text style={[styles.newClCancelText, { color: colors.mutedForeground }]}>{tr.more.cancel}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.newClSave, { backgroundColor: newClTitle.trim() ? colors.primary : colors.secondary }]}
@@ -318,7 +328,7 @@ export default function MoreScreen() {
                     }}
                   >
                     <Feather name="check" size={14} color={newClTitle.trim() ? "#111827" : colors.mutedForeground} />
-                    <Text style={[styles.newClSaveText, { color: newClTitle.trim() ? "#111827" : colors.mutedForeground }]}>Создать</Text>
+                    <Text style={[styles.newClSaveText, { color: newClTitle.trim() ? "#111827" : colors.mutedForeground }]}>{tr.more.create}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -328,7 +338,7 @@ export default function MoreScreen() {
                 onPress={() => { setAddingCl(true); Haptics.selectionAsync(); }}
               >
                 <Feather name="plus" size={15} color={colors.primary} />
-                <Text style={[styles.newClBtnText, { color: colors.primary }]}>Новый чеклист</Text>
+                <Text style={[styles.newClBtnText, { color: colors.primary }]}>{tr.more.newChecklist}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -365,10 +375,12 @@ export default function MoreScreen() {
           </View>
           <View style={styles.menuInfo}>
             <Text style={[styles.menuLabel, { color: colors.foreground }]}>
-              {isLoggedIn && manager ? manager.name : tr.more.loginBtn}
+              {isLoggedIn && (manager ?? employee) ? (manager ?? employee)!.name : tr.more.loginBtn}
             </Text>
             <Text style={[styles.menuSub, { color: colors.mutedForeground }]}>
-              {isLoggedIn && venue ? venue.name : tr.more.localOnly}
+              {isLoggedIn && venue
+                ? `${venue.name}${subscriptionExpired ? ` · ${tr.subscription.expiredWarning}` : ""}`
+                : tr.more.localOnly}
             </Text>
           </View>
           {isLoggedIn && (
@@ -389,6 +401,12 @@ export default function MoreScreen() {
             <Feather name="star" size={13} color={colors.primary} />
             <Text style={[styles.subscriptionText, { color: colors.primary }]}>{tr.more.subscriptionText}</Text>
           </View>
+          <TouchableOpacity style={{ marginTop: 12 }} onPress={() => router.push("/privacy" as any)}>
+            <Text style={{ color: colors.primary, fontFamily: "Inter_500Medium", textAlign: "center" }}>{tr.more.privacyLink}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={{ marginTop: 8 }} onPress={() => router.push("/terms" as any)}>
+            <Text style={{ color: colors.primary, fontFamily: "Inter_500Medium", textAlign: "center" }}>{tr.more.termsLink}</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 

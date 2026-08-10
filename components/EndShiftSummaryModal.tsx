@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DayEntry, ShiftResult, calcDayResults } from "@/context/AppContext";
 import { ShiftState } from "@/context/BonifaceContext";
+import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
@@ -26,23 +27,27 @@ interface EndShiftSummaryModalProps {
   dayEntry: DayEntry;
 }
 
-function getShiftDuration(startTime: string): string {
+function getShiftDurationParts(startTime: string): { h: number; m: number } {
   const [sh, sm] = startTime.split(":").map(Number);
   const now = new Date();
   let totalMins = (now.getHours() - sh) * 60 + (now.getMinutes() - sm);
   if (totalMins < 0) totalMins += 24 * 60;
-  const h = Math.floor(totalMins / 60);
-  const m = totalMins % 60;
-  return `${h}ч ${m}м`;
+  return { h: Math.floor(totalMins / 60), m: totalMins % 60 };
 }
 
 export function EndShiftSummaryModal({ visible, onClose, onConfirm, shiftState, dayEntry }: EndShiftSummaryModalProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { tr } = useLang();
 
   const results: ShiftResult[] = calcDayResults(dayEntry);
   const totalTips = dayEntry.totalCash + dayEntry.totalCard;
-  const duration = shiftState.startTime ? getShiftDuration(shiftState.startTime) : "—";
+  const duration = shiftState.startTime
+    ? (() => {
+        const { h, m } = getShiftDurationParts(shiftState.startTime);
+        return tr.home.duration(h, m);
+      })()
+    : "—";
 
   const handleConfirm = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -60,12 +65,11 @@ export function EndShiftSummaryModal({ visible, onClose, onConfirm, shiftState, 
         <View style={[styles.sheet, { backgroundColor: c.card, maxHeight: maxH, paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={[styles.handle, { backgroundColor: c.border }]} />
 
-          {/* Header */}
           <View style={styles.headerRow}>
             <View>
-              <Text style={[styles.title, { color: c.foreground }]}>Итоги смены</Text>
+              <Text style={[styles.title, { color: c.foreground }]}>{tr.endShift.title}</Text>
               <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-                Начало: {shiftState.startTime ?? "—"} · Длительность: {duration}
+                {tr.endShift.subtitle(shiftState.startTime ?? "—", duration)}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -74,30 +78,28 @@ export function EndShiftSummaryModal({ visible, onClose, onConfirm, shiftState, 
           </View>
 
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-            {/* Total tips summary */}
             <View style={[styles.totalCard, { backgroundColor: "#F59E0B18", borderColor: "#F59E0B33" }]}>
               <View style={styles.totalRow}>
                 <View style={styles.totalItem}>
-                  <Text style={[styles.totalLabel, { color: c.mutedForeground }]}>Наличные</Text>
+                  <Text style={[styles.totalLabel, { color: c.mutedForeground }]}>{tr.home.cashLabel}</Text>
                   <Text style={[styles.totalValue, { color: "#F59E0B" }]}>{dayEntry.totalCash.toLocaleString()} ₪</Text>
                 </View>
                 <View style={[styles.divider, { backgroundColor: c.border }]} />
                 <View style={styles.totalItem}>
-                  <Text style={[styles.totalLabel, { color: c.mutedForeground }]}>Карта</Text>
+                  <Text style={[styles.totalLabel, { color: c.mutedForeground }]}>{tr.home.cardLabel}</Text>
                   <Text style={[styles.totalValue, { color: "#F59E0B" }]}>{dayEntry.totalCard.toLocaleString()} ₪</Text>
                 </View>
                 <View style={[styles.divider, { backgroundColor: c.border }]} />
                 <View style={styles.totalItem}>
-                  <Text style={[styles.totalLabel, { color: c.mutedForeground }]}>Итого</Text>
+                  <Text style={[styles.totalLabel, { color: c.mutedForeground }]}>{tr.endShift.total}</Text>
                   <Text style={[styles.totalValueBig, { color: "#F59E0B" }]}>{totalTips.toLocaleString()} ₪</Text>
                 </View>
               </View>
             </View>
 
-            {/* Per-employee breakdown */}
             {results.length > 0 ? (
               <>
-                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>РАСПРЕДЕЛЕНИЕ ЧАЕВЫХ</Text>
+                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>{tr.endShift.distribution}</Text>
                 {results.map((r) => (
                   <View key={r.shift.id} style={[styles.empCard, { backgroundColor: c.secondary, borderColor: c.border }]}>
                     <View style={styles.empCardLeft}>
@@ -110,8 +112,8 @@ export function EndShiftSummaryModal({ visible, onClose, onConfirm, shiftState, 
                         <Text style={[styles.empName, { color: c.foreground }]}>{r.shift.employeeName}</Text>
                         <Text style={[styles.empDetail, { color: c.mutedForeground }]}>
                           {r.shift.tipMode === "hours"
-                            ? `${r.hoursWorked.toFixed(1)} ч · ${r.sharePercent.toFixed(0)}%`
-                            : `Фикс. ${r.sharePercent.toFixed(0)}%`}
+                            ? tr.endShift.hoursShare(r.hoursWorked.toFixed(1), r.sharePercent.toFixed(0))
+                            : tr.endShift.fixedShare(r.sharePercent.toFixed(0))}
                         </Text>
                       </View>
                     </View>
@@ -132,53 +134,51 @@ export function EndShiftSummaryModal({ visible, onClose, onConfirm, shiftState, 
               <View style={[styles.emptyBox, { borderColor: c.border }]}>
                 <Feather name="info" size={20} color={c.mutedForeground} />
                 <Text style={[styles.emptyText, { color: c.mutedForeground }]}>
-                  Чаевые не добавлены. Можно завершить смену и добавить позже.
+                  {tr.endShift.noTips}
                 </Text>
               </View>
             )}
 
-            {/* Shift summary stats */}
             <View style={[styles.statsRow, { backgroundColor: c.secondary, borderColor: c.border }]}>
               <View style={styles.statItem}>
                 <Feather name="users" size={16} color={c.mutedForeground} />
                 <Text style={[styles.statValue, { color: c.foreground }]}>{dayEntry.shifts.length}</Text>
-                <Text style={[styles.statLabel, { color: c.mutedForeground }]}>сотрудников</Text>
+                <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{tr.home.employees}</Text>
               </View>
               <View style={[styles.statDivider, { backgroundColor: c.border }]} />
               <View style={styles.statItem}>
                 <Feather name="clock" size={16} color={c.mutedForeground} />
                 <Text style={[styles.statValue, { color: c.foreground }]}>{duration}</Text>
-                <Text style={[styles.statLabel, { color: c.mutedForeground }]}>длительность</Text>
+                <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{tr.endShift.durationLabel}</Text>
               </View>
               <View style={[styles.statDivider, { backgroundColor: c.border }]} />
               <View style={styles.statItem}>
                 <Feather name="trending-up" size={16} color={c.mutedForeground} />
                 <Text style={[styles.statValue, { color: c.foreground }]}>
                   {results.length > 0 && results[0].tipsPerHour > 0
-                    ? Math.round(results.reduce((s, r) => s + r.tipsPerHour, 0) / results.length) + " ₪/ч"
+                    ? tr.endShift.perHourValue(String(Math.round(results.reduce((s, r) => s + r.tipsPerHour, 0) / results.length)))
                     : "—"}
                 </Text>
-                <Text style={[styles.statLabel, { color: c.mutedForeground }]}>ср. в час</Text>
+                <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{tr.endShift.avgPerHour}</Text>
               </View>
             </View>
 
             <View style={{ height: 8 }} />
           </ScrollView>
 
-          {/* Action buttons */}
           <View style={styles.btnRow}>
             <TouchableOpacity
               style={[styles.btnSecondary, { borderColor: c.border, flex: 1 }]}
               onPress={onClose}
             >
-              <Text style={[styles.btnSecondaryText, { color: c.foreground }]}>Отмена</Text>
+              <Text style={[styles.btnSecondaryText, { color: c.foreground }]}>{tr.team.cancel}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.btn, { backgroundColor: "#EF4444", flex: 2 }]}
               onPress={handleConfirm}
             >
               <Feather name="stop-circle" size={18} color="#fff" />
-              <Text style={[styles.btnText, { color: "#fff" }]}>Завершить смену</Text>
+              <Text style={[styles.btnText, { color: "#fff" }]}>{tr.home.endShift}</Text>
             </TouchableOpacity>
           </View>
         </View>

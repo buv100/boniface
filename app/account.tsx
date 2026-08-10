@@ -20,7 +20,7 @@ import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 import { apiCall } from "@/lib/api";
 
-type Mode = "welcome" | "login" | "register";
+type Mode = "welcome" | "login" | "register" | "recover" | "join" | "employeeLogin";
 
 const CURRENCY_SYMBOLS: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€" };
 
@@ -28,7 +28,25 @@ export default function AccountScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tr } = useLang();
-  const { register, login, isLoggedIn, manager, venue, logout, updateVenueLocally, token } = useAuth();
+  const {
+    register,
+    login,
+    employeeLogin,
+    employeeJoin,
+    isLoggedIn,
+    manager,
+    employee,
+    venue,
+    logout,
+    updateVenueLocally,
+    token,
+    forgotCheck,
+    recover,
+    role,
+    subscription,
+    subscriptionExpired,
+    isEmployee,
+  } = useAuth();
 
   const [mode, setMode] = useState<Mode>("welcome");
   const [isEditing, setIsEditing] = useState(false);
@@ -38,6 +56,12 @@ export default function AccountScreen() {
   const [confirmPin, setConfirmPin] = useState("");
   const [venueName, setVenueName] = useState("");
   const [managerName, setManagerName] = useState("");
+  const [securityQuestion, setSecurityQuestion] = useState("");
+  const [securityAnswer, setSecurityAnswer] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [questionHint, setQuestionHint] = useState<string | undefined>();
+  const [inviteCode, setInviteCode] = useState("");
+  const [joinName, setJoinName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -54,6 +78,12 @@ export default function AccountScreen() {
       setEditCurrency(venue.currency);
     }
   }, [venue]);
+
+  useEffect(() => {
+    if (isLoggedIn && isEmployee) {
+      router.replace("/employee" as any);
+    }
+  }, [isLoggedIn, isEmployee]);
 
   const clearError = () => setError("");
 
@@ -73,6 +103,22 @@ export default function AccountScreen() {
     }
   };
 
+  const handleEmployeeLogin = async () => {
+    if (!phone.trim() || !pin.trim()) { setError(tr.account.fillAll); return; }
+    setLoading(true);
+    setError("");
+    try {
+      await employeeLogin(phone.trim(), pin);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace("/employee" as any);
+    } catch (e: any) {
+      setError(e.message ?? tr.account.loginError);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRegister = async () => {
     if (!venueName.trim() || !managerName.trim() || !phone.trim() || !pin.trim()) {
       setError(tr.account.fillAll);
@@ -83,11 +129,75 @@ export default function AccountScreen() {
     setLoading(true);
     setError("");
     try {
-      await register(venueName.trim(), managerName.trim(), phone.trim(), pin);
+      await register(venueName.trim(), managerName.trim(), phone.trim(), pin, {
+        securityQuestion: securityQuestion.trim() || undefined,
+        securityAnswer: securityAnswer.trim() || undefined,
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (e: any) {
       setError(e.message ?? tr.account.registerError);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotCheck = async () => {
+    if (!phone.trim()) { setError(tr.account.fillAll); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await forgotCheck(phone.trim());
+      if (!res.hasSecurityQuestion) {
+        setError(tr.account.recoverUnavailable);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else {
+        setQuestionHint(res.questionHint);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (e: any) {
+      setError(e.message ?? tr.account.recoverError);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecover = async () => {
+    if (!phone.trim() || !securityAnswer.trim() || !newPin.trim()) {
+      setError(tr.account.fillAll);
+      return;
+    }
+    if (newPin.length < 4) { setError(tr.account.pinMin); return; }
+    if (newPin !== confirmPin) { setError(tr.account.pinMismatch); return; }
+    setLoading(true);
+    setError("");
+    try {
+      await recover(phone.trim(), securityAnswer.trim(), newPin);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.back();
+    } catch (e: any) {
+      setError(e.message ?? tr.account.recoverError);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJoin = async () => {
+    if (!inviteCode.trim() || !joinName.trim() || !pin.trim()) {
+      setError(tr.account.fillAll);
+      return;
+    }
+    if (pin.length < 4) { setError(tr.account.pinMin); return; }
+    setLoading(true);
+    setError("");
+    try {
+      await employeeJoin(inviteCode.trim(), joinName.trim(), pin, phone.trim() || undefined);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace("/employee" as any);
+    } catch (e: any) {
+      setError(e.message ?? tr.account.joinError);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
@@ -137,7 +247,15 @@ export default function AccountScreen() {
     label: tr.account.currencies[code],
   }));
 
-  if (isLoggedIn && manager && venue) {
+  const profileUser = manager ?? employee;
+
+  if (isLoggedIn && profileUser && venue) {
+    const subLabel = subscriptionExpired
+      ? tr.account.subExpiredBanner
+      : subscription?.expiresAt
+        ? tr.account.subActiveBanner(new Date(subscription.expiresAt).toLocaleDateString())
+        : tr.account.subNone;
+
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
@@ -150,7 +268,7 @@ export default function AccountScreen() {
           <Text style={[styles.topTitle, { color: colors.foreground }]}>
             {isEditing ? tr.account.editing : tr.account.title}
           </Text>
-          {isEditing ? (
+          {manager && isEditing ? (
             <TouchableOpacity
               onPress={handleSaveVenue}
               style={[styles.saveBtn, { backgroundColor: colors.primary }]}
@@ -161,13 +279,15 @@ export default function AccountScreen() {
                 : <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>{tr.account.save}</Text>
               }
             </TouchableOpacity>
-          ) : (
+          ) : manager ? (
             <TouchableOpacity
               onPress={() => { setIsEditing(true); Haptics.selectionAsync(); }}
               style={styles.editBtn}
             >
               <Feather name="edit-2" size={18} color={colors.primary} />
             </TouchableOpacity>
+          ) : (
+            <View style={{ width: 36 }} />
           )}
         </View>
 
@@ -179,15 +299,35 @@ export default function AccountScreen() {
           <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.avatarBig, { backgroundColor: colors.primary + "22" }]}>
               <Text style={[styles.avatarBigText, { color: colors.primary }]}>
-                {manager.name.charAt(0).toUpperCase()}
+                {profileUser.name.charAt(0).toUpperCase()}
               </Text>
             </View>
-            <Text style={[styles.profileName, { color: colors.foreground }]}>{manager.name}</Text>
-            <Text style={[styles.profilePhone, { color: colors.mutedForeground }]}>{manager.phone}</Text>
+            <Text style={[styles.profileName, { color: colors.foreground }]}>{profileUser.name}</Text>
+            {"phone" in profileUser && profileUser.phone ? (
+              <Text style={[styles.profilePhone, { color: colors.mutedForeground }]}>{profileUser.phone}</Text>
+            ) : null}
             <View style={[styles.venueBadge, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "33" }]}>
               <Feather name="map-pin" size={12} color={colors.primary} />
               <Text style={[styles.venueBadgeText, { color: colors.primary }]}>{venue.name}</Text>
             </View>
+            <Text style={[styles.roleTag, { color: colors.mutedForeground }]}>
+              {role === "employee" ? tr.account.roleEmployee : tr.account.roleManager}
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.subBanner,
+              {
+                backgroundColor: subscriptionExpired ? "#EF444414" : "#10B98114",
+                borderColor: subscriptionExpired ? "#EF444433" : "#10B98133",
+              },
+            ]}
+          >
+            <Feather name={subscriptionExpired ? "alert-triangle" : "check-circle"} size={15} color={subscriptionExpired ? "#EF4444" : "#10B981"} />
+            <Text style={{ color: subscriptionExpired ? "#EF4444" : "#10B981", flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" }}>
+              {subLabel}
+            </Text>
           </View>
 
           {editSaved && (
@@ -197,10 +337,9 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {isEditing ? (
+          {manager && isEditing ? (
             <View style={styles.editSection}>
               <Text style={[styles.sectionHeading, { color: colors.mutedForeground }]}>{tr.account.venueSectionLabel}</Text>
-
               <View style={[styles.inputGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.inputRow}>
                   <Feather name="map-pin" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
@@ -214,7 +353,6 @@ export default function AccountScreen() {
                   />
                 </View>
               </View>
-
               <Text style={[styles.sectionHeading, { color: colors.mutedForeground, marginTop: 20 }]}>{tr.account.currencyLabel}</Text>
               <View style={styles.currencyRow}>
                 {currencies.map((c) => {
@@ -245,7 +383,6 @@ export default function AccountScreen() {
                   );
                 })}
               </View>
-
               {!!editError && (
                 <View style={[styles.errorBox, { backgroundColor: "#EF444414", borderColor: "#EF444433", marginTop: 8 }]}>
                   <Feather name="alert-circle" size={14} color="#EF4444" />
@@ -264,32 +401,45 @@ export default function AccountScreen() {
                   ? `${currencies.find((c) => c.code === venue.currency)!.symbol} ${currencies.find((c) => c.code === venue.currency)!.label} (${venue.currency})`
                   : venue.currency}
               </Text>
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>{tr.account.managerLabel}</Text>
-              <Text style={[styles.infoValue, { color: colors.foreground }]}>{manager.name}</Text>
             </View>
           )}
 
           {!isEditing && (
-            <TouchableOpacity
-              style={[styles.logoutBtn, { backgroundColor: "#EF444414", borderColor: "#EF444433" }]}
-              onPress={handleLogout}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#EF4444" />
-              ) : (
-                <>
-                  <Feather name="log-out" size={18} color="#EF4444" />
-                  <Text style={[styles.logoutText, { color: "#EF4444" }]}>{tr.account.logout}</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={styles.linkRow} onPress={() => router.push("/privacy" as any)}>
+                <Text style={{ color: colors.primary, fontFamily: "Inter_500Medium" }}>{tr.account.privacyLink}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.linkRow} onPress={() => router.push("/terms" as any)}>
+                <Text style={{ color: colors.primary, fontFamily: "Inter_500Medium" }}>{tr.account.termsLink}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.logoutBtn, { backgroundColor: "#EF444414", borderColor: "#EF444433" }]}
+                onPress={handleLogout}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#EF4444" />
+                ) : (
+                  <>
+                    <Feather name="log-out" size={18} color="#EF4444" />
+                    <Text style={[styles.logoutText, { color: "#EF4444" }]}>{tr.account.logout}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
           )}
         </ScrollView>
       </View>
     );
   }
+
+  const modeTitle =
+    mode === "login" ? tr.account.loginMode
+      : mode === "register" ? tr.account.registerMode
+        : mode === "recover" ? tr.account.recoverTitle
+          : mode === "join" ? tr.account.joinTitle
+            : mode === "employeeLogin" ? tr.account.employeeLoginTitle
+              : tr.account.title;
 
   return (
     <KeyboardAvoidingView
@@ -300,9 +450,7 @@ export default function AccountScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={[styles.topTitle, { color: colors.foreground }]}>
-          {mode === "login" ? tr.account.loginMode : mode === "register" ? tr.account.registerMode : tr.account.title}
-        </Text>
+        <Text style={[styles.topTitle, { color: colors.foreground }]}>{modeTitle}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -337,9 +485,32 @@ export default function AccountScreen() {
               <Text style={[styles.secondaryBtnText, { color: colors.foreground }]}>{tr.account.registerBtn}</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={() => { setMode("join"); clearError(); }}
+            >
+              <Feather name="users" size={18} color={colors.foreground} />
+              <Text style={[styles.secondaryBtnText, { color: colors.foreground }]}>{tr.account.joinEmployee}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={() => { setMode("employeeLogin"); clearError(); }}
+            >
+              <Feather name="user" size={18} color={colors.foreground} />
+              <Text style={[styles.secondaryBtnText, { color: colors.foreground }]}>{tr.account.employeeLoginBtn}</Text>
+            </TouchableOpacity>
+
             <Text style={[styles.offlineNote, { color: colors.mutedForeground }]}>
               {tr.account.offlineNote}
             </Text>
+
+            <TouchableOpacity style={styles.linkRow} onPress={() => router.push("/privacy" as any)}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>{tr.account.privacyLink}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.linkRow} onPress={() => router.push("/terms" as any)}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>{tr.account.termsLink}</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -400,6 +571,232 @@ export default function AccountScreen() {
               )}
             </TouchableOpacity>
 
+            <TouchableOpacity
+              onPress={() => { setMode("recover"); clearError(); setQuestionHint(undefined); }}
+              style={styles.linkBtn}
+            >
+              <Text style={[styles.linkText, { color: colors.primary }]}>{tr.account.forgotPin}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => { setMode("welcome"); clearError(); }} style={styles.linkBtn}>
+              <Text style={[styles.linkText, { color: colors.mutedForeground }]}>{tr.account.back}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {mode === "recover" && (
+          <View style={styles.form}>
+            <Text style={[styles.formTitle, { color: colors.foreground }]}>{tr.account.recoverTitle}</Text>
+            <Text style={[styles.formSub, { color: colors.mutedForeground }]}>{tr.account.recoverSub}</Text>
+
+            <View style={[styles.inputGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.inputRow}>
+                <Feather name="phone" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.phonePlaceholder}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={phone}
+                  onChangeText={(t) => { setPhone(t); clearError(); setQuestionHint(undefined); }}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              {questionHint ? (
+                <>
+                  <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.inputRow}>
+                    <Feather name="help-circle" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                    <Text style={[styles.input, { color: colors.mutedForeground }]}>{questionHint}</Text>
+                  </View>
+                  <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.inputRow}>
+                    <Feather name="message-circle" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, { color: colors.foreground }]}
+                      placeholder={tr.account.securityAnswerPlaceholder}
+                      placeholderTextColor={colors.mutedForeground}
+                      value={securityAnswer}
+                      onChangeText={(t) => { setSecurityAnswer(t); clearError(); }}
+                    />
+                  </View>
+                  <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.inputRow}>
+                    <Feather name="lock" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, { color: colors.foreground }]}
+                      placeholder={tr.account.newPinPlaceholder}
+                      placeholderTextColor={colors.mutedForeground}
+                      value={newPin}
+                      onChangeText={(t) => { setNewPin(t); clearError(); }}
+                      keyboardType="numeric"
+                      secureTextEntry
+                      maxLength={6}
+                    />
+                  </View>
+                  <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.inputRow}>
+                    <Feather name="lock" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                    <TextInput
+                      style={[styles.input, { color: colors.foreground }]}
+                      placeholder={tr.account.confirmPinPlaceholder}
+                      placeholderTextColor={colors.mutedForeground}
+                      value={confirmPin}
+                      onChangeText={(t) => { setConfirmPin(t); clearError(); }}
+                      keyboardType="numeric"
+                      secureTextEntry
+                      maxLength={6}
+                    />
+                  </View>
+                </>
+              ) : null}
+            </View>
+
+            {!!error && (
+              <View style={[styles.errorBox, { backgroundColor: "#EF444414", borderColor: "#EF444433" }]}>
+                <Feather name="alert-circle" size={14} color="#EF4444" />
+                <Text style={[styles.errorText, { color: "#EF4444" }]}>{error}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 8 }]}
+              onPress={questionHint ? handleRecover : handleForgotCheck}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : (
+                <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>
+                  {questionHint ? tr.account.doRecover : tr.account.recoverCheck}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => { setMode("login"); clearError(); }} style={styles.linkBtn}>
+              <Text style={[styles.linkText, { color: colors.mutedForeground }]}>{tr.account.back}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {mode === "join" && (
+          <View style={styles.form}>
+            <Text style={[styles.formTitle, { color: colors.foreground }]}>{tr.account.joinTitle}</Text>
+            <Text style={[styles.formSub, { color: colors.mutedForeground }]}>{tr.account.joinSub}</Text>
+            <View style={[styles.inputGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.inputRow}>
+                <Feather name="key" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.inviteCodePlaceholder}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={inviteCode}
+                  onChangeText={(t) => { setInviteCode(t.toUpperCase()); clearError(); }}
+                  autoCapitalize="characters"
+                />
+              </View>
+              <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.inputRow}>
+                <Feather name="user" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.yourName}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={joinName}
+                  onChangeText={(t) => { setJoinName(t); clearError(); }}
+                />
+              </View>
+              <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.inputRow}>
+                <Feather name="phone" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.phoneLongPlaceholder}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={phone}
+                  onChangeText={(t) => { setPhone(t); clearError(); }}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.inputRow}>
+                <Feather name="lock" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.pinLongPlaceholder}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={pin}
+                  onChangeText={(t) => { setPin(t); clearError(); }}
+                  keyboardType="numeric"
+                  secureTextEntry
+                  maxLength={6}
+                />
+              </View>
+            </View>
+            {!!error && (
+              <View style={[styles.errorBox, { backgroundColor: "#EF444414", borderColor: "#EF444433" }]}>
+                <Feather name="alert-circle" size={14} color="#EF4444" />
+                <Text style={[styles.errorText, { color: "#EF4444" }]}>{error}</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 8 }]}
+              onPress={handleJoin}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : (
+                <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>{tr.account.doJoin}</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setMode("welcome"); clearError(); }} style={styles.linkBtn}>
+              <Text style={[styles.linkText, { color: colors.mutedForeground }]}>{tr.account.back}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {mode === "employeeLogin" && (
+          <View style={styles.form}>
+            <Text style={[styles.formTitle, { color: colors.foreground }]}>{tr.account.employeeLoginTitle}</Text>
+            <Text style={[styles.formSub, { color: colors.mutedForeground }]}>{tr.account.employeeLoginSub}</Text>
+            <View style={[styles.inputGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.inputRow}>
+                <Feather name="phone" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.phonePlaceholder}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={phone}
+                  onChangeText={(t) => { setPhone(t); clearError(); }}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.inputRow}>
+                <Feather name="lock" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.pinPlaceholder}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={pin}
+                  onChangeText={(t) => { setPin(t); clearError(); }}
+                  keyboardType="numeric"
+                  secureTextEntry
+                  maxLength={6}
+                />
+              </View>
+            </View>
+            {!!error && (
+              <View style={[styles.errorBox, { backgroundColor: "#EF444414", borderColor: "#EF444433" }]}>
+                <Feather name="alert-circle" size={14} color="#EF4444" />
+                <Text style={[styles.errorText, { color: "#EF4444" }]}>{error}</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 8 }]}
+              onPress={handleEmployeeLogin}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : (
+                <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>{tr.account.doLogin}</Text>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => { setMode("welcome"); clearError(); }} style={styles.linkBtn}>
               <Text style={[styles.linkText, { color: colors.mutedForeground }]}>{tr.account.back}</Text>
             </TouchableOpacity>
@@ -476,6 +873,28 @@ export default function AccountScreen() {
                   maxLength={6}
                 />
               </View>
+              <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.inputRow}>
+                <Feather name="help-circle" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.securityQuestionPlaceholder}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={securityQuestion}
+                  onChangeText={setSecurityQuestion}
+                />
+              </View>
+              <View style={[styles.inputDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.inputRow}>
+                <Feather name="message-circle" size={16} color={colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { color: colors.foreground }]}
+                  placeholder={tr.account.securityAnswerPlaceholder}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={securityAnswer}
+                  onChangeText={setSecurityAnswer}
+                />
+              </View>
             </View>
 
             {!!error && (
@@ -524,6 +943,8 @@ const styles = StyleSheet.create({
   profilePhone: { fontSize: 14, fontFamily: "Inter_400Regular" },
   venueBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
   venueBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  roleTag: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 4 },
+  subBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
   savedBanner: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
   savedText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   editSection: { gap: 4 },
@@ -562,4 +983,5 @@ const styles = StyleSheet.create({
   formSub: { fontSize: 14, fontFamily: "Inter_400Regular", marginBottom: 4 },
   linkBtn: { alignItems: "center", paddingVertical: 12 },
   linkText: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  linkRow: { alignItems: "center", paddingVertical: 8 },
 });

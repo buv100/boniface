@@ -16,18 +16,11 @@ import {
   Employee,
   ShiftResult,
   calcDayResults,
-  formatDateRu,
 } from "@/context/AppContext";
+import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
-
-const MONTH_LABELS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-
-function fmtDate(dateStr: string): string {
-  const [, m, d] = dateStr.split("-");
-  return `${parseInt(d)} ${MONTH_LABELS[parseInt(m) - 1]}`;
-}
 
 interface EmployeeShiftRow {
   date: string;
@@ -51,6 +44,12 @@ export function EmployeeDetailModal({
 }: EmployeeDetailModalProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { tr } = useLang();
+
+  const fmtDate = (dateStr: string): string => {
+    const [, m, d] = dateStr.split("-");
+    return `${parseInt(d)} ${tr.monthsShort[parseInt(m) - 1]}`;
+  };
 
   const shifts = useMemo<EmployeeShiftRow[]>(() => {
     if (!employee) return [];
@@ -80,7 +79,6 @@ export function EmployeeDetailModal({
         <View style={[styles.sheet, { backgroundColor: c.card, maxHeight: maxH, paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={[styles.handle, { backgroundColor: c.border }]} />
 
-          {/* Header */}
           <View style={styles.header}>
             <View style={[styles.bigAvatar, { backgroundColor: avatarColor + "22" }]}>
               <Text style={[styles.bigAvatarText, { color: avatarColor }]}>{initials}</Text>
@@ -93,11 +91,11 @@ export function EmployeeDetailModal({
               {isOnShift ? (
                 <View style={[styles.onShiftBadge, { backgroundColor: "#10B98122" }]}>
                   <View style={[styles.pulse, { backgroundColor: "#10B981" }]} />
-                  <Text style={[styles.onShiftText, { color: "#10B981" }]}>Сейчас на смене</Text>
+                  <Text style={[styles.onShiftText, { color: "#10B981" }]}>{tr.team.onShiftNow}</Text>
                 </View>
               ) : (
                 <Text style={[styles.shiftCount, { color: c.mutedForeground }]}>
-                  {shifts.length > 0 ? `${shifts.length} смен всего` : "Нет смен"}
+                  {shifts.length > 0 ? tr.empDetail.shiftsTotal(shifts.length) : tr.team.noShifts}
                 </Text>
               )}
             </View>
@@ -106,45 +104,43 @@ export function EmployeeDetailModal({
             </TouchableOpacity>
           </View>
 
-          {/* Stats row */}
           <View style={[styles.statsRow, { backgroundColor: c.secondary, borderColor: c.border }]}>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: c.primary }]}>{Math.round(totalTips).toLocaleString()} ₪</Text>
-              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>заработано</Text>
+              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{tr.empDetail.earned}</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: c.border }]} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: c.foreground }]}>{shifts.length}</Text>
-              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>смен</Text>
+              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{tr.empDetail.shifts}</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: c.border }]} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: c.foreground }]}>
                 {avgPerShift > 0 ? `${Math.round(avgPerShift)} ₪` : "—"}
               </Text>
-              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>ср./смена</Text>
+              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{tr.empDetail.avgPerShift}</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: c.border }]} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: c.foreground }]}>
-                {totalHours > 0 ? `${Math.round(totalHours)} ч` : "—"}
+                {totalHours > 0 ? `${Math.round(totalHours)} ${tr.card.hoursAbbrev}` : "—"}
               </Text>
-              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>часов</Text>
+              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{tr.empDetail.hours}</Text>
             </View>
           </View>
 
-          {/* History */}
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
             {shifts.length > 0 ? (
               <>
-                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>ИСТОРИЯ СМЕН</Text>
+                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>{tr.empDetail.historyLabel}</Text>
                 {shifts.map(({ date, result }) => (
                   <View key={date + result.shift.id} style={[styles.shiftRow, { borderColor: c.border }]}>
                     <View style={styles.shiftLeft}>
                       <Text style={[styles.shiftDate, { color: c.foreground }]}>{fmtDate(date)}</Text>
                       <Text style={[styles.shiftDetail, { color: c.mutedForeground }]}>
                         {result.shift.startTime} – {result.shift.endTime}
-                        {result.hoursWorked > 0 ? ` · ${result.hoursWorked.toFixed(1)} ч` : ""}
+                        {result.hoursWorked > 0 ? tr.empDetail.hoursSuffix(result.hoursWorked.toFixed(1)) : ""}
                       </Text>
                     </View>
                     <View style={styles.shiftRight}>
@@ -164,28 +160,27 @@ export function EmployeeDetailModal({
               <View style={[styles.emptyBox, { borderColor: c.border }]}>
                 <Feather name="clock" size={24} color={c.mutedForeground} />
                 <Text style={[styles.emptyText, { color: c.mutedForeground }]}>
-                  История смен появится после первого расчёта чаевых
+                  {tr.empDetail.emptyHistory}
                 </Text>
               </View>
             )}
             <View style={{ height: 8 }} />
           </ScrollView>
 
-          {/* Actions */}
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.actionBtn, { borderColor: c.border, flex: 1 }]}
               onPress={() => { onClose(); setTimeout(onEdit, 300); }}
             >
               <Feather name="edit-2" size={16} color={c.foreground} />
-              <Text style={[styles.actionBtnText, { color: c.foreground }]}>Редактировать</Text>
+              <Text style={[styles.actionBtnText, { color: c.foreground }]}>{tr.team.editTitle}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { borderColor: "#EF444433", backgroundColor: "#EF444411", flex: 1 }]}
               onPress={() => { onClose(); setTimeout(onDelete, 300); }}
             >
               <Feather name="trash-2" size={16} color="#EF4444" />
-              <Text style={[styles.actionBtnText, { color: "#EF4444" }]}>Удалить</Text>
+              <Text style={[styles.actionBtnText, { color: "#EF4444" }]}>{tr.team.delete}</Text>
             </TouchableOpacity>
           </View>
         </View>

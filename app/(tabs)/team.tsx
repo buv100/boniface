@@ -18,9 +18,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EmployeeDetailModal } from "@/components/EmployeeDetailModal";
 import { Employee, calcDayResults, useApp } from "@/context/AppContext";
-import { useBoniface } from "@/context/BonifaceContext";
+import { useAuth } from "@/context/AuthContext";
+import { pickEmployeeOfMonth, useBoniface } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
+import { shareText } from "@/utils/exportCsv";
 
 const AVATAR_COLORS = [
   "#F59E0B", "#3B82F6", "#10B981", "#EF4444",
@@ -40,8 +42,11 @@ export default function TeamScreen() {
   const { tr } = useLang();
   const { employees, addEmployee, updateEmployee, deleteEmployee, dayEntries } = useApp();
   const { shiftState } = useBoniface();
+  const { createInvite, canManageCritical, isManager, isLoggedIn } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
   const [filterMode, setFilterMode] = useState<"all" | "onShift">("all");
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
 
@@ -91,6 +96,40 @@ export default function TeamScreen() {
     return map;
   }, [employees, dayEntries, cutoff7]);
 
+  const employeeOfMonth = useMemo(() => {
+    const cutoffStr = `${cutoff7.getFullYear()}-${String(cutoff7.getMonth() + 1).padStart(2, "0")}-${String(cutoff7.getDate()).padStart(2, "0")}`;
+    const map: Record<
+      string,
+      { employeeId: string; employeeName: string; tipsLast7: number; shiftsLast7: number }
+    > = {};
+    for (const emp of employees) {
+      map[emp.id] = {
+        employeeId: emp.id,
+        employeeName: emp.name,
+        tipsLast7: 0,
+        shiftsLast7: 0,
+      };
+    }
+    for (const entry of dayEntries) {
+      if (entry.date < cutoffStr) continue;
+      const results = calcDayResults(entry);
+      for (const r of results) {
+        const id = r.shift.employeeId;
+        if (!map[id]) {
+          map[id] = {
+            employeeId: id,
+            employeeName: r.shift.employeeName,
+            tipsLast7: 0,
+            shiftsLast7: 0,
+          };
+        }
+        map[id].tipsLast7 += r.totalTips;
+        map[id].shiftsLast7 += 1;
+      }
+    }
+    return pickEmployeeOfMonth(Object.values(map));
+  }, [employees, dayEntries, cutoff7]);
+
   const onShiftIds = new Set(shiftState.employeeIds ?? []);
   const onShiftNow = employees.filter((e) => onShiftIds.has(e.id));
   const offShift = employees.filter((e) => !onShiftIds.has(e.id));
@@ -111,6 +150,28 @@ export default function TeamScreen() {
     setEditEmployee(null); setNameInput(""); setPhoneInput(""); setSelectedRoles([]); setNameError("");
     setModalVisible(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleInvite = async () => {
+    if (!isLoggedIn || !isManager) {
+      Alert.alert(tr.team.inviteTitle, tr.schedule.needLogin);
+      return;
+    }
+    if (!canManageCritical) {
+      Alert.alert(tr.team.inviteTitle, tr.team.inviteNeedSub);
+      return;
+    }
+    setInviteBusy(true);
+    try {
+      const res = await createInvite();
+      setInviteCode(res.code);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Alert.alert(tr.team.inviteTitle, e?.message ?? tr.team.inviteError);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setInviteBusy(false);
+    }
   };
 
   const openEdit = (emp: Employee) => {
@@ -156,7 +217,7 @@ export default function TeamScreen() {
   };
 
   const now = new Date();
-  const monthName = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][now.getMonth()];
+  const monthName = tr.monthsShort[now.getMonth()];
 
   const renderEmployee = ({ item }: { item: Employee }) => {
     const empColor = getColor(item.id);
@@ -198,11 +259,11 @@ export default function TeamScreen() {
           <View style={styles.empActiveRight}>
             <View style={styles.liveDot} />
             <Text style={styles.liveText}>
-              {stats.totalShifts > 0 ? `≈${Math.round(stats.avgPerShift)} ₪` : "active"}
+              {stats.totalShifts > 0 ? `≈${Math.round(stats.avgPerShift)} ₪` : tr.team.activeBadge}
             </Text>
           </View>
         ) : (
-          <Text style={styles.offShiftLabel}>Off</Text>
+          <Text style={styles.offShiftLabel}>{tr.team.offBadge}</Text>
         )}
       </TouchableOpacity>
     );
@@ -221,12 +282,60 @@ export default function TeamScreen() {
             {/* Header */}
             <View style={styles.pageHeader}>
               <Text style={[styles.pageTitle, { color: colors.foreground }]}>{tr.team.title}</Text>
-              <TouchableOpacity
-                style={[styles.addBtn, { backgroundColor: colors.primary }]}
-                onPress={openAdd}
-              >
-                <Feather name="plus" size={18} color="#111827" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.addBtn, { backgroundColor: "rgba(245,158,11,0.2)", borderWidth: 1, borderColor: colors.primary }]}
+                  onPress={handleInvite}
+                  disabled={inviteBusy}
+                >
+                  <Feather name="share-2" size={16} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.addBtn, { backgroundColor: colors.primary }]}
+                  onPress={openAdd}
+                >
+                  <Feather name="plus" size={18} color="#111827" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {inviteCode && (
+              <View style={[styles.inviteBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
+                  {tr.team.inviteCreated(inviteCode)}
+                </Text>
+                <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 4 }}>{tr.team.inviteHint}</Text>
+                <TouchableOpacity
+                  style={{ marginTop: 10 }}
+                  onPress={() => shareText(`${tr.team.inviteCreated(inviteCode)}\n${tr.team.inviteHint}`, tr.team.inviteTitle)}
+                >
+                  <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>{tr.team.inviteShare}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View
+              style={[
+                styles.eomCard,
+                { backgroundColor: "rgba(245,158,11,0.1)", borderColor: "rgba(245,158,11,0.28)" },
+              ]}
+            >
+              <View style={[styles.eomIcon, { backgroundColor: "rgba(245,158,11,0.2)" }]}>
+                <Feather name="award" size={16} color="#F59E0B" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.eomTitle}>{tr.eom.title}</Text>
+                <Text style={styles.eomSub}>{tr.eom.sub}</Text>
+                {employeeOfMonth ? (
+                  <Text style={styles.eomName}>
+                    {employeeOfMonth.employeeName}
+                    {" · "}
+                    {tr.eom.tips(employeeOfMonth.tipsLast7.toFixed(0))}
+                  </Text>
+                ) : (
+                  <Text style={styles.eomSub}>{tr.eom.empty}</Text>
+                )}
+              </View>
             </View>
 
             {/* Search */}
@@ -250,7 +359,7 @@ export default function TeamScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
               {[
                 { key: "all", label: `${tr.team.allTeam} ${employees.length}` },
-                { key: "onShift", label: `On shift ${onShiftNow.length}` },
+                { key: "onShift", label: tr.team.onShiftFilter(onShiftNow.length) },
               ].map(({ key, label }) => (
                 <TouchableOpacity
                   key={key}
@@ -287,7 +396,7 @@ export default function TeamScreen() {
 
             {/* Section label */}
             {onShiftNow.length > 0 && filterMode === "all" && (
-              <Text style={styles.sectionLabel}>На смене сейчас</Text>
+              <Text style={styles.sectionLabel}>{tr.team.onShiftSection}</Text>
             )}
           </View>
         }
@@ -395,6 +504,26 @@ const styles = StyleSheet.create({
 
   pageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
   pageTitle: { fontSize: 26, fontFamily: "Inter_700Bold" },
+  inviteBanner: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 14 },
+  eomCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+  eomIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eomTitle: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#F59E0B" },
+  eomSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.4)", marginTop: 1 },
+  eomName: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#FFFFFF", marginTop: 4 },
   addBtn: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
 
   searchBar: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 11, borderWidth: 1, marginBottom: 12 },

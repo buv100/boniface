@@ -13,7 +13,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { StopListItem, useBoniface } from "@/context/BonifaceContext";
+import { StopListItem, getLocalizedStockItem, useBoniface } from "@/context/BonifaceContext";
+import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
 export function StopListSheet({ visible, onClose }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { tr } = useLang();
   const { stopList, stockItems, addToStopList, removeFromStopList, clearStopList } = useBoniface();
 
   const [addMode, setAddMode] = useState(false);
@@ -40,10 +42,35 @@ export function StopListSheet({ visible, onClose }: Props) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const handleAddFromStock = async (name: string) => {
-    await addToStopList(name, "Закончилось");
+  const handleAddFromStock = async (stockId: string) => {
+    const raw = stockItems.find((s) => s.id === stockId);
+    if (!raw) return;
+    const loc = getLocalizedStockItem(raw, tr);
+    await addToStopList(loc.name, tr.stopList.reasonOutOfStock);
     setShowStockPicker(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const displayStopName = (name: string) => {
+    const raw = stockItems.find((s) => s.name === name);
+    if (raw) return getLocalizedStockItem(raw, tr).name;
+    const seedHit = Object.entries(tr.seedStock ?? {}).find(
+      ([, v]) => v.name === name
+    );
+    if (seedHit) {
+      const byId = stockItems.find((s) => s.id === seedHit[0]);
+      if (byId) return getLocalizedStockItem(byId, tr).name;
+      return (tr.seedStock as Record<string, { name: string; unit: string }> | undefined)?.[seedHit[0]]?.name ?? name;
+    }
+    // Match stored Russian/English seed names to current language
+    for (const [id, seed] of Object.entries(tr.seedStock ?? {})) {
+      void seed;
+      const rawById = stockItems.find((s) => s.id === id);
+      if (rawById && (rawById.name === name || getLocalizedStockItem(rawById, tr).name === name)) {
+        return getLocalizedStockItem(rawById, tr).name;
+      }
+    }
+    return name;
   };
 
   const handleRemove = (item: StopListItem) => {
@@ -53,14 +80,16 @@ export function StopListSheet({ visible, onClose }: Props) {
 
   const handleClearAll = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert("Очистить стоп-лист?", "Все позиции будут убраны.", [
-      { text: "Отмена", style: "cancel" },
-      { text: "Очистить", style: "destructive", onPress: () => { clearStopList(); } },
+    Alert.alert(tr.stopList.clearTitle, tr.stopList.clearMsg, [
+      { text: tr.team.cancel, style: "cancel" },
+      { text: tr.stopList.clear, style: "destructive", onPress: () => { clearStopList(); } },
     ]);
   };
 
   const alreadyStopped = new Set(stopList.map((i) => i.name));
-  const availableStock = stockItems.filter((s) => !alreadyStopped.has(s.name));
+  const availableStock = stockItems
+    .map((s) => getLocalizedStockItem(s, tr))
+    .filter((s) => !alreadyStopped.has(s.name) && !alreadyStopped.has(stockItems.find((r) => r.id === s.id)?.name ?? ""));
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -74,9 +103,9 @@ export function StopListSheet({ visible, onClose }: Props) {
                 <Feather name="slash" size={18} color="#EF4444" />
               </View>
               <View>
-                <Text style={[styles.title, { color: colors.foreground }]}>Стоп-лист</Text>
+                <Text style={[styles.title, { color: colors.foreground }]}>{tr.stopList.title}</Text>
                 <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                  {stopList.length > 0 ? `${stopList.length} позиций недоступно` : "Список пуст"}
+                  {stopList.length > 0 ? tr.stopList.countUnavailable(stopList.length) : tr.stopList.emptyList}
                 </Text>
               </View>
             </View>
@@ -89,8 +118,8 @@ export function StopListSheet({ visible, onClose }: Props) {
             {stopList.length === 0 && !addMode && (
               <View style={styles.emptyState}>
                 <Feather name="check-circle" size={36} color={colors.mutedForeground} />
-                <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Всё доступно</Text>
-                <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>Добавьте позиции которых нет этой сменой</Text>
+                <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{tr.stopList.allAvailable}</Text>
+                <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>{tr.stopList.emptySub}</Text>
               </View>
             )}
 
@@ -99,7 +128,7 @@ export function StopListSheet({ visible, onClose }: Props) {
                 <View style={styles.stopLeft}>
                   <View style={[styles.stopDot, { backgroundColor: "#EF4444" }]} />
                   <View>
-                    <Text style={[styles.stopName, { color: colors.foreground }]}>{item.name}</Text>
+                    <Text style={[styles.stopName, { color: colors.foreground }]}>{displayStopName(item.name)}</Text>
                     {item.reason ? (
                       <Text style={[styles.stopReason, { color: colors.mutedForeground }]}>{item.reason}</Text>
                     ) : null}
@@ -113,33 +142,33 @@ export function StopListSheet({ visible, onClose }: Props) {
 
             {addMode && (
               <View style={[styles.addForm, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-                <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>ПОЗИЦИЯ</Text>
+                <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>{tr.stopList.itemLabel}</Text>
                 <TextInput
                   style={[styles.formInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
-                  placeholder="Название позиции"
+                  placeholder={tr.stopList.namePlaceholder}
                   placeholderTextColor={colors.mutedForeground}
                   value={customName}
                   onChangeText={setCustomName}
                   autoFocus
                 />
-                <Text style={[styles.formLabel, { color: colors.mutedForeground, marginTop: 10 }]}>ПРИЧИНА (необязательно)</Text>
+                <Text style={[styles.formLabel, { color: colors.mutedForeground, marginTop: 10 }]}>{tr.stopList.reasonLabel}</Text>
                 <TextInput
                   style={[styles.formInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
-                  placeholder="Закончилось, не завезли..."
+                  placeholder={tr.stopList.reasonPlaceholder}
                   placeholderTextColor={colors.mutedForeground}
                   value={reason}
                   onChangeText={setReason}
                 />
                 <View style={styles.formBtns}>
                   <TouchableOpacity style={[styles.formBtn, { borderColor: colors.border }]} onPress={() => { setAddMode(false); setCustomName(""); setReason(""); }}>
-                    <Text style={[styles.formBtnText, { color: colors.mutedForeground }]}>Отмена</Text>
+                    <Text style={[styles.formBtnText, { color: colors.mutedForeground }]}>{tr.team.cancel}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.formBtn, styles.formBtnPrimary, { backgroundColor: customName.trim() ? "#EF4444" : colors.border }]}
                     onPress={handleAddCustom}
                     disabled={!customName.trim()}
                   >
-                    <Text style={[styles.formBtnText, { color: "#fff" }]}>Добавить</Text>
+                    <Text style={[styles.formBtnText, { color: "#fff" }]}>{tr.team.addBtn}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -147,15 +176,15 @@ export function StopListSheet({ visible, onClose }: Props) {
 
             {showStockPicker && (
               <View style={[styles.stockPicker, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-                <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>ВЫБРАТЬ ИЗ СКЛАДА</Text>
+                <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>{tr.stopList.selectFromStock}</Text>
                 {availableStock.length === 0 ? (
-                  <Text style={[styles.emptySub, { color: colors.mutedForeground, textAlign: "left" }]}>Все позиции уже в стоп-листе</Text>
+                  <Text style={[styles.emptySub, { color: colors.mutedForeground, textAlign: "left" }]}>{tr.stopList.allInStopList}</Text>
                 ) : (
                   availableStock.map((s) => (
                     <TouchableOpacity
                       key={s.id}
                       style={[styles.stockRow, { borderColor: colors.border }]}
-                      onPress={() => handleAddFromStock(s.name)}
+                      onPress={() => handleAddFromStock(s.id)}
                     >
                       <Text style={[styles.stockName, { color: colors.foreground }]}>{s.name}</Text>
                       <Feather name="plus" size={16} color={colors.primary} />
@@ -163,7 +192,7 @@ export function StopListSheet({ visible, onClose }: Props) {
                   ))
                 )}
                 <TouchableOpacity style={styles.closePickerBtn} onPress={() => setShowStockPicker(false)}>
-                  <Text style={[styles.closePickerText, { color: colors.mutedForeground }]}>Закрыть</Text>
+                  <Text style={[styles.closePickerText, { color: colors.mutedForeground }]}>{tr.stopList.close}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -178,7 +207,7 @@ export function StopListSheet({ visible, onClose }: Props) {
                 onPress={handleClearAll}
               >
                 <Feather name="trash-2" size={15} color="#EF4444" />
-                <Text style={[styles.footerBtnText, { color: "#EF4444" }]}>Очистить всё</Text>
+                <Text style={[styles.footerBtnText, { color: "#EF4444" }]}>{tr.stopList.clearAll}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -186,14 +215,14 @@ export function StopListSheet({ visible, onClose }: Props) {
               onPress={() => { setShowStockPicker(!showStockPicker); setAddMode(false); }}
             >
               <Feather name="layers" size={15} color={colors.mutedForeground} />
-              <Text style={[styles.footerBtnText, { color: colors.mutedForeground }]}>Из склада</Text>
+              <Text style={[styles.footerBtnText, { color: colors.mutedForeground }]}>{tr.stopList.fromStock}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.footerBtn, styles.footerBtnAdd, { backgroundColor: "#EF4444" }]}
               onPress={() => { setAddMode(!addMode); setShowStockPicker(false); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
             >
               <Feather name="plus" size={15} color="#fff" />
-              <Text style={[styles.footerBtnText, { color: "#fff" }]}>Добавить</Text>
+              <Text style={[styles.footerBtnText, { color: "#fff" }]}>{tr.team.addBtn}</Text>
             </TouchableOpacity>
           </View>
         </View>

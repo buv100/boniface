@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddShiftModal } from "@/components/AddShiftModal";
@@ -21,37 +23,50 @@ import {
   todayString,
   useApp,
 } from "@/context/AppContext";
+import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 
 interface TipsEntryModalProps {
   visible: boolean;
   onClose: () => void;
+  /** When set, edit that day's tips (fix wrong-date entries). Defaults to today. */
+  date?: string;
 }
 
-export function TipsEntryModal({ visible, onClose }: TipsEntryModalProps) {
+export function TipsEntryModal({ visible, onClose, date }: TipsEntryModalProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { tr } = useLang();
   const { dayEntries, saveDayEntry } = useApp();
-  const today = todayString();
+  const targetDate = date ?? todayString();
 
   const [cash, setCash] = useState("");
   const [card, setCard] = useState("");
   const [shiftModal, setShiftModal] = useState(false);
   const [editShift, setEditShift] = useState<ShiftEntry | undefined>();
-  const [draft, setDraft] = useState<DayEntry>(() => ({ id: generateId(), date: today, totalCash: 0, totalCard: 0, shifts: [] }));
+  const [draft, setDraft] = useState<DayEntry>(() => ({
+    id: generateId(),
+    date: targetDate,
+    totalCash: 0,
+    totalCard: 0,
+    shifts: [],
+  }));
 
   const hasInitRef = useRef(false);
+  const ScrollComponent = Platform.OS === "web" ? ScrollView : KeyboardAwareScrollView;
 
   useEffect(() => {
     if (visible) {
-      const existing = dayEntries.find((e) => e.date === today);
-      const entry = existing ?? { id: generateId(), date: today, totalCash: 0, totalCard: 0, shifts: [] };
+      const existing = dayEntries.find((e) => e.date === targetDate);
+      const entry =
+        existing ??
+        { id: generateId(), date: targetDate, totalCash: 0, totalCard: 0, shifts: [] };
       setDraft(entry);
       setCash(entry.totalCash > 0 ? entry.totalCash.toString() : "");
       setCard(entry.totalCard > 0 ? entry.totalCard.toString() : "");
       hasInitRef.current = true;
     }
-  }, [visible]);
+  }, [visible, targetDate, dayEntries]);
 
   const commit = (updated: DayEntry) => {
     setDraft(updated);
@@ -85,10 +100,10 @@ export function TipsEntryModal({ visible, onClose }: TipsEntryModalProps) {
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <View style={styles.titleRow}>
             <View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Чаевые сегодня</Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>{tr.tipsEntry.title}</Text>
               {totalTips > 0 && (
                 <Text style={[styles.totalPreview, { color: colors.primary }]}>
-                  Итого: {totalTips.toLocaleString()} ₪
+                  {tr.tipsEntry.total(totalTips.toLocaleString())}
                 </Text>
               )}
             </View>
@@ -96,10 +111,10 @@ export function TipsEntryModal({ visible, onClose }: TipsEntryModalProps) {
               <Feather name="x" size={22} color={colors.mutedForeground} />
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <ScrollComponent style={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={styles.inputRow}>
               <View style={[styles.inputBlock, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-                <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Наличные ₪</Text>
+                <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>{tr.tipsEntry.cashLabel}</Text>
                 <TextInput
                   style={[styles.amountInput, { color: colors.foreground }]}
                   value={cash}
@@ -111,7 +126,7 @@ export function TipsEntryModal({ visible, onClose }: TipsEntryModalProps) {
                 />
               </View>
               <View style={[styles.inputBlock, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-                <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Карта ₪</Text>
+                <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>{tr.tipsEntry.cardLabel}</Text>
                 <TextInput
                   style={[styles.amountInput, { color: colors.foreground }]}
                   value={card}
@@ -126,13 +141,13 @@ export function TipsEntryModal({ visible, onClose }: TipsEntryModalProps) {
             {results.length > 0 && (
               <>
                 <View style={styles.shiftHeader}>
-                  <Text style={[styles.shiftLabel, { color: colors.mutedForeground }]}>РАСПРЕДЕЛЕНИЕ</Text>
+                  <Text style={[styles.shiftLabel, { color: colors.mutedForeground }]}>{tr.tipsEntry.distribution}</Text>
                   <TouchableOpacity
                     style={[styles.addBtn, { backgroundColor: colors.primary }]}
                     onPress={() => { setEditShift(undefined); setShiftModal(true); }}
                   >
                     <Feather name="plus" size={14} color={colors.primaryForeground} />
-                    <Text style={[styles.addBtnText, { color: colors.primaryForeground }]}>Сотрудник</Text>
+                    <Text style={[styles.addBtnText, { color: colors.primaryForeground }]}>{tr.tipsEntry.employee}</Text>
                   </TouchableOpacity>
                 </View>
                 {results.map((r) => (
@@ -155,18 +170,18 @@ export function TipsEntryModal({ visible, onClose }: TipsEntryModalProps) {
                 onPress={() => { setEditShift(undefined); setShiftModal(true); }}
               >
                 <Feather name="user-plus" size={16} color={colors.mutedForeground} />
-                <Text style={[styles.addShiftEmptyText, { color: colors.mutedForeground }]}>Добавить сотрудника</Text>
+                <Text style={[styles.addShiftEmptyText, { color: colors.mutedForeground }]}>{tr.tipsEntry.addEmployee}</Text>
               </TouchableOpacity>
             )}
 
             <View style={{ height: 12 }} />
-          </ScrollView>
+          </ScrollComponent>
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: colors.primary, marginHorizontal: 20 }]}
             onPress={handleSave}
           >
             <Feather name="check" size={18} color={colors.primaryForeground} />
-            <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>Сохранить</Text>
+            <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>{tr.team.save}</Text>
           </TouchableOpacity>
         </View>
       </View>

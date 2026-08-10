@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { calcDayResults, useApp } from "@/context/AppContext";
+import { pickEmployeeOfMonth } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 import { exportToCsv } from "@/utils/exportCsv";
@@ -99,6 +100,32 @@ export default function StatsScreen() {
   const grandCash = statsList.reduce((s, e) => s + e.totalCash, 0);
   const grandCard = statsList.reduce((s, e) => s + e.totalCard, 0);
 
+  const employeeOfMonth = useMemo(() => {
+    const cutoff = cutoffDate(7);
+    const map: Record<
+      string,
+      { employeeId: string; employeeName: string; tipsLast7: number; shiftsLast7: number }
+    > = {};
+    for (const entry of dayEntries) {
+      if (entry.date < cutoff) continue;
+      const results = calcDayResults(entry);
+      for (const r of results) {
+        const id = r.shift.employeeId;
+        if (!map[id]) {
+          map[id] = {
+            employeeId: id,
+            employeeName: r.shift.employeeName,
+            tipsLast7: 0,
+            shiftsLast7: 0,
+          };
+        }
+        map[id].tipsLast7 += r.totalTips;
+        map[id].shiftsLast7 += 1;
+      }
+    }
+    return pickEmployeeOfMonth(Object.values(map));
+  }, [dayEntries]);
+
   const formatMonthLabel = (monthStr: string) => {
     const [year, month] = monthStr.split("-").map(Number);
     return `${tr.months[month - 1]} ${year}`;
@@ -115,7 +142,7 @@ export default function StatsScreen() {
       await exportToCsv(filtered, name);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert("Error", tr.stats.exportError);
+      Alert.alert(tr.stats.error, tr.stats.exportError);
     } finally {
       setExporting(false);
     }
@@ -221,6 +248,29 @@ export default function StatsScreen() {
               </View>
             )}
 
+            <View style={[styles.eomCard, { backgroundColor: colors.primary + "14", borderColor: colors.primary + "44" }]}>
+              <View style={[styles.eomIcon, { backgroundColor: colors.primary + "22" }]}>
+                <Feather name="award" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.eomTitle, { color: colors.primary }]}>{tr.eom.title}</Text>
+                <Text style={[styles.eomSub, { color: colors.mutedForeground }]}>{tr.eom.sub}</Text>
+                {employeeOfMonth ? (
+                  <>
+                    <Text style={[styles.eomName, { color: colors.foreground }]}>
+                      {employeeOfMonth.employeeName}
+                    </Text>
+                    <Text style={[styles.eomMeta, { color: colors.mutedForeground }]}>
+                      {tr.eom.tips(employeeOfMonth.tipsLast7.toFixed(0))} ·{" "}
+                      {tr.eom.shifts(employeeOfMonth.shiftsLast7)}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={[styles.eomMeta, { color: colors.mutedForeground }]}>{tr.eom.empty}</Text>
+                )}
+              </View>
+            </View>
+
             {statsList.length > 0 && (
               <>
                 <View style={[styles.summaryBox, { backgroundColor: colors.card, borderColor: colors.border, flexDirection: isRTL ? "row-reverse" : "row" }]}>
@@ -278,6 +328,26 @@ const styles = StyleSheet.create({
   monthNav: { alignItems: "center", justifyContent: "space-between", borderRadius: 12, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 10, marginBottom: 10 },
   monthBtn: { padding: 6 },
   monthText: { fontSize: 16, fontFamily: "Inter_600SemiBold", flex: 1, textAlign: "center" },
+  eomCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
+  eomIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eomTitle: { fontSize: 12, fontFamily: "Inter_700Bold", letterSpacing: 0.4 },
+  eomSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  eomName: { fontSize: 16, fontFamily: "Inter_700Bold", marginTop: 4 },
+  eomMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   summaryBox: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 16 },
   summaryItem: { flex: 1, alignItems: "center" },
   summaryLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 4 },
