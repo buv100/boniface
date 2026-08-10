@@ -1,0 +1,14 @@
+node_modules
+.expo
+.git
+dist
+web-build
+*.db
+.env
+.env.*
+app
+components
+assets
+docs
+*.md
+!README.md

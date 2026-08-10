@@ -12,6 +12,42 @@
 - **איפה שונה באפליקציה:** מסך / מודל / זרימה למשתמש (או «אין — מסמכים בלבד»)
 ```
 
+### 2026-08-10 — EAS link + fix Android build (Hermes private fields)
+- **מה השתנה:** חיבור לפרויקט Expo `2b48a973-…` (`@nave123s-team/nave`), `slug: nave`, כיבוי `reactCompiler`; תיקון `babel-preset-expo` ל־`~54.0.10` + Babel plugins ל־private fields; `appVersionSource` ב־EAS.
+- **למה:** לאפשר בניית APK לחברים; הבנייה נכשלה ב־`private properties are not supported` (גם בגלל babel-preset לא תואם ל־SDK 54).
+- **איפה שונה בקוד:** `app.json`, `eas.json`, `babel.config.js`, `package.json`, `change.md`
+- **איפה שונה באפליקציה:** אין שינוי UI — תשתית הפצה
+
+### 2026-08-10 — פריסת API חינמית (Render/Docker)
+- **מה השתנה:** `Dockerfile`, `render.yaml`, האזנה על `0.0.0.0`, `DATA_DIR`/`DATABASE_PATH`, סקריפט `api:start`, הוראות ב־README.
+- **למה:** לאפשר API בענן בחינם כדי שהאפליקציה תעבוד בכל טלפון.
+- **איפה שונה בקוד:** `Dockerfile`, `.dockerignore`, `render.yaml`, `server/src/index.ts`, `server/src/db/index.ts`, `package.json`, `.env.example`, `README.md`, `change.md`
+- **איפה שונה באפליקציה:** אין UI — תשתית שרת בענן
+
+### 2026-08-10 — הפרדת מנהל/עובד + DAL מלא
+- **מה השתנה:** שכבת `server/src/dal` + `services`; routes דקים עם `requireManager`/`requireEmployee`; פורטל עובד `/api/employee/*` (טיפים שלי, מלאי lite, סטופ); בצד לקוח `lib/repositories` + `lib/services`; RoleGate מחמיר; מסכי עובד בלי גישה לנתוני מנהל; הקשר עוזר AI מסונן לפי תפקיד.
+- **למה:** הפרדה אמיתית של הרשאות ונתונים, וארכיטקטורת DAL במקום SQL/API ישיר מה־UI/routes.
+- **איפה שונה בקוד:** `server/src/dal/**`, `server/src/services/**`, `server/src/routes/**`, `server/src/middleware/auth.ts`, `server/src/assistant/context.ts`, `lib/repositories/**`, `lib/services/**`, `context/AppContext.tsx`, `context/BonifaceContext.tsx`, `app/_layout.tsx`, `app/employee/**`, `hooks/useAssistantLiveContext.ts`, `change.md`
+- **איפה שונה באפליקציה:** עובד רואה רק פורטל עובד + נתונים שלו; מנהל ממשיך לנהל; צ׳אט AI לפי תפקיד
+
+### 2026-08-10 — תיקוני EAS לבניית APK
+- **מה השתנה:** `babel-preset-expo@54`, כיבוי React Compiler, Babel overrides ל־private fields ב־node_modules בלבד, `react-native.config.js` לא כולל `better-sqlite3`, `.easignore` לשרת.
+- **למה:** בניית Android נכשלה ב־Hermes (`private properties`) / קונפליקטי Babel.
+- **איפה שונה בקוד:** `babel.config.js`, `package.json`, `react-native.config.js`, `.easignore`, `app.json`, `eas.json`, `change.md`
+- **איפה שונה באפליקציה:** אין — תשתית הפצה
+
+### 2026-08-10 — עוזר AI עם נתוני משתמש חיים (מלאי/טיפים/צוות)
+- **מה השתנה:** כל הודעת צ׳אט שולחת snapshot מקומי (מלאי, סטופ, מחיקות, טיפים, עובדים, משמרת, צ׳קליסטים, Happy Hour) + מיזוג עם נתוני שרת אם מחוברים; הפרומפט מנחה לסכום/סינון לפי השאלה (למשל כל סוגי וודקה).
+- **למה:** שהעוזר יענה על שאלות ספציפיות למקום של המשתמש עם חישובים אמיתיים, לא רק עצות כלליות.
+- **איפה שונה בקוד:** `lib/assistantContext.ts`, `hooks/useAssistantLiveContext.ts`, `server/src/assistant/context.ts`, `server/src/routes/assistant.ts`, `components/AssistantFab.tsx`, `app/assistant.tsx`, `lib/translations.ts`, `change.md`
+- **איפה שונה באפליקציה:** הצ׳אט יודע לענות לפי מלאי/טיפים/צוות של המקום המחובר
+
+### 2026-08-10 — כפתור צ׳אט AI צף קבוע
+- **מה השתנה:** כפתור זהב עגול קבוע מעל הטאבים בכל המסכים; לחיצה פותחת חלון צ׳אט קטן (מודל) בלי לעזוב את המסך; ניווט מהעוזר סוגר את החלון ומעביר למסך.
+- **למה:** הכניסה לעוזר לא הייתה בולטת מספיק — צריך גישה מיידית לשיחה מכל מקום.
+- **איפה שונה בקוד:** `components/AssistantFab.tsx`, `lib/navigateAssistant.ts`, `app/_layout.tsx`, `app/assistant.tsx`, `lib/translations.ts`, `change.md`
+- **איפה שונה באפליקציה:** כפתור צ׳אט צף קבוע + חלון שיחה קטן
+
 ### 2026-08-10 — עוזר AI (Groq) עם ניווט למסכים
 - **מה השתנה:** מסך צ׳אט `assistant` מול `POST /api/assistant/chat` (Groq); תשובות בעברית/רוסית/אנגלית; עצות שימוש + שורת `NAVIGATE:` שמעבירה למסך מותר מרשימה לבנה; כניסות מ«עוד», כותרת הבית, ומסך עובד; `optionalAuth`; מפתח רק ב-`.env` (לא בגיט).
 - **למה:** לתת מדריך אינטראקטיבי באפליקציה שמסביר וגם מנווט לפיצ׳ר המבוקש.

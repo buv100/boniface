@@ -29,6 +29,24 @@ Starts the local server on port **3001** (SQLite file under `server/data/`).
 npm run typecheck
 ```
 
+## Deploy API (free — Render)
+
+1. Push this repo to GitHub (already connected).
+2. Open [Render Blueprint](https://dashboard.render.com/select-repo?type=blueprint) → choose `buv100/boniface`.
+3. Set `GROQ_API_KEY` in the service env (from Groq console).
+4. After deploy, health check: `https://<your-service>.onrender.com/api/health`
+5. Rebuild the mobile app with:
+   `EXPO_PUBLIC_API_URL=https://<your-service>.onrender.com/api`
+
+Free tier sleeps when idle (first request may take ~30–60s). SQLite on free is ephemeral (resets on redeploy).
+
+Docker locally:
+
+```bash
+docker build -t boniface-api .
+docker run --rm -p 3001:3001 -e JWT_SECRET=dev -e GROQ_API_KEY=... boniface-api
+```
+
 ## EAS / store builds
 
 Profiles live in `eas.json`:

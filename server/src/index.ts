@@ -7,6 +7,7 @@ import { ensureSchema } from "./db";
 import authRoutes from "./routes/auth";
 import assistantRoutes from "./routes/assistant";
 import dayEntriesRoutes from "./routes/dayEntries";
+import employeePortalRoutes from "./routes/employeePortal";
 import employeesRoutes from "./routes/employees";
 import stockRoutes from "./routes/stock";
 import syncRoutes from "./routes/sync";
@@ -26,6 +27,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/assistant", assistantRoutes);
+app.use("/api/employee", employeePortalRoutes);
 app.use("/api/employees", employeesRoutes);
 app.use("/api/day-entries", dayEntriesRoutes);
 app.use("/api/venue", venueRoutes);
@@ -37,7 +39,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(PORT, () => {
-  console.log(`Boniface API listening on http://localhost:${PORT}`);
-  console.log(`Health: http://localhost:${PORT}/api/health`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Boniface API listening on http://0.0.0.0:${PORT}`);
+  console.log(`Health: http://0.0.0.0:${PORT}/api/health`);
 });
