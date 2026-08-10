@@ -12,6 +12,12 @@
 - **איפה שונה באפליקציה:** מסך / מודל / זרימה למשתמש (או «אין — מסמכים בלבד»)
 ```
 
+### 2026-08-10 — מוכן לשליחה לחברים (API URL ב־EAS)
+- **מה השתנה:** `EXPO_PUBLIC_API_URL` בפרופיל `preview` של EAS מצביע ל־`https://boniface-api.onrender.com/api`; דחיפת קוד מלא (DAL/עובד/FAB) ל־GitHub.
+- **למה:** APK לחברים חייב לדבר עם API ציבורי, לא localhost.
+- **איפה שונה בקוד:** `eas.json`, `change.md` (+ שאר קבצי האפליקציה/שרת בדחיפה)
+- **איפה שונה באפליקציה:** בנייה לחברים תתחבר לשרת בענן אחרי דיפלוי Render
+
 ### 2026-08-10 — EAS link + fix Android build (Hermes private fields)
 - **מה השתנה:** חיבור לפרויקט Expo `2b48a973-…` (`@nave123s-team/nave`), `slug: nave`, כיבוי `reactCompiler`; תיקון `babel-preset-expo` ל־`~54.0.10` + Babel plugins ל־private fields; `appVersionSource` ב־EAS.
 - **למה:** לאפשר בניית APK לחברים; הבנייה נכשלה ב־`private properties are not supported` (גם בגלל babel-preset לא תואם ל־SDK 54).
