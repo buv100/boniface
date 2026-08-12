@@ -183,7 +183,7 @@ export default function DashboardScreen() {
             <HeaderIconButton
               hint={tr.home.hintAccount}
               onPress={() => router.navigate("/account")}
-              style={[styles.avatar, { backgroundColor: colors.primary }]}
+              style={[styles.alertBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
             >
               <Text style={styles.avatarText}>{managerInitial}</Text>
             </HeaderIconButton>
@@ -609,10 +609,9 @@ const styles = StyleSheet.create({
   dateChipSep: { width: 1, height: 11, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 1 },
   dateChipTime: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#F9FAFB", letterSpacing: 0.4, fontVariant: ["tabular-nums"] },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8, zIndex: 31, overflow: "visible" },
-  alertBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
+  alertBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, minWidth: 32, minHeight: 32, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
   alertBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#EF4444" },
-  avatar: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#111827" },
+  avatarText: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#111827" },
 
   // Phase 1: checklist progress
   clProgress: { marginBottom: 14, gap: 6 },
