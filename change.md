@@ -12,6 +12,12 @@
 - **איפה שונה באפליקציה:** מסך / מודל / זרימה למשתמש (או «אין — מסמכים בלבד»)
 ```
 
+### 2026-08-12 — תיקון EAS Android (New Architecture ל־Reanimated 4)
+- **מה השתנה:** `newArchEnabled: true`, `expo-build-properties`, `react-native-reanimated/plugin` ב־Babel.
+- **למה:** הבנייה נכשלה ב־`assertNewArchitectureEnabledTask` (Reanimated 4 + Worklets דורשים New Arch).
+- **איפה שונה בקוד:** `app.json`, `babel.config.js`, `package.json`, `change.md`
+- **איפה שונה באפליקציה:** אין UI — תיקון בניית APK
+
 ### 2026-08-10 — מוכן לשליחה לחברים (API URL ב־EAS)
 - **מה השתנה:** `EXPO_PUBLIC_API_URL` בפרופיל `preview` של EAS מצביע ל־`https://boniface-api.onrender.com/api`; דחיפת קוד מלא (DAL/עובד/FAB) ל־GitHub.
 - **למה:** APK לחברים חייב לדבר עם API ציבורי, לא localhost.
