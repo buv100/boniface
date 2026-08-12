@@ -64,6 +64,7 @@ export default function DashboardScreen() {
   const [startShiftModal, setStartShiftModal] = useState(false);
   const [endShiftModal, setEndShiftModal] = useState(false);
   const [tipsModal, setTipsModal] = useState(false);
+  const [venuePicker, setVenuePicker] = useState(false);
   const [titleWidth, setTitleWidth] = useState<number | undefined>();
 
   const draftRef = useRef(draft);
