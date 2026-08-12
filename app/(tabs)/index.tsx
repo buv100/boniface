@@ -64,7 +64,7 @@ export default function DashboardScreen() {
   const [startShiftModal, setStartShiftModal] = useState(false);
   const [endShiftModal, setEndShiftModal] = useState(false);
   const [tipsModal, setTipsModal] = useState(false);
-  const [venuePicker, setVenuePicker] = useState(false);
+  const [titleWidth, setTitleWidth] = useState<number | undefined>();
 
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -146,19 +146,28 @@ export default function DashboardScreen() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity
-              style={styles.venueNameRow}
-              onPress={() => setVenuePicker(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.venueName} numberOfLines={1}>{venueName}</Text>
-              <Feather name="chevron-down" size={12} color="#F59E0B" />
-            </TouchableOpacity>
-            <View style={[styles.dateChip, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
-              <Feather name="calendar" size={11} color="rgba(245,158,11,0.9)" />
-              <Text style={styles.dateChipText}>{dateLabel}</Text>
-              <View style={styles.dateChipSep} />
-              <Text style={styles.dateChipTime}>{timeStr}</Text>
+            <View style={styles.brandBlock}>
+              <TouchableOpacity
+                style={styles.venueNameRow}
+                onPress={() => setVenuePicker(true)}
+                activeOpacity={0.7}
+                onLayout={(e) => setTitleWidth(e.nativeEvent.layout.width)}
+              >
+                <Text style={styles.venueName} numberOfLines={1}>{venueName}</Text>
+                <Feather name="chevron-down" size={14} color="#F59E0B" />
+              </TouchableOpacity>
+              <View
+                style={[
+                  styles.dateRow,
+                  {
+                    flexDirection: isRTL ? "row-reverse" : "row",
+                    width: titleWidth,
+                  },
+                ]}
+              >
+                <Text style={styles.dateTimeText}>{dateLabel}</Text>
+                <Text style={styles.dateTimeText}>{timeStr}</Text>
+              </View>
             </View>
           </View>
 
@@ -204,8 +213,6 @@ export default function DashboardScreen() {
           <View style={[styles.heroCardDark, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.heroRow}>
               <Text style={[styles.heroEyebrowDark, { color: colors.primary }]}>{tr.home.phaseBefore}</Text>
-              <Text style={[styles.heroTitleDark, { color: colors.foreground }]}>{timeStr}</Text>
-              <Text style={[styles.heroSubDark, { color: colors.mutedForeground }]}>{dateLabel}</Text>
             </View>
 
             {totalChecklistItems > 0 && (
@@ -593,23 +600,12 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20, zIndex: 30, overflow: "visible" },
-  headerLeft: { flex: 1, gap: 8, paddingRight: 12 },
+  headerLeft: { flex: 1, paddingRight: 12 },
+  brandBlock: { alignSelf: "flex-start" },
   venueNameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   venueName: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#F59E0B" },
-  dateChip: {
-    alignSelf: "flex-start",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  dateChipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.72)" },
-  dateChipSep: { width: 1, height: 11, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 1 },
-  dateChipTime: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#F9FAFB", letterSpacing: 0.4, fontVariant: ["tabular-nums"] },
+  dateRow: { marginTop: 4, justifyContent: "space-between", alignItems: "center", gap: 8 },
+  dateTimeText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#F59E0B", fontVariant: ["tabular-nums"] },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8, zIndex: 31, overflow: "visible" },
   alertBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
   alertBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#EF4444" },
@@ -678,7 +674,7 @@ const styles = StyleSheet.create({
 
   // Hero card — inactive (dark)
   heroCardDark: { borderRadius: 24, padding: 20, marginBottom: 14, borderWidth: 1 },
-  heroRow: { marginBottom: 16 },
+  heroRow: { marginBottom: 12 },
   heroEyebrowDark: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8, textTransform: "uppercase" },
   heroTitleDark: { fontSize: 22, fontFamily: "Inter_700Bold", marginTop: 4, marginBottom: 4 },
   heroSubDark: { fontSize: 13, fontFamily: "Inter_400Regular" },

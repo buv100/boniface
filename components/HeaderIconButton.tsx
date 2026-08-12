@@ -17,38 +17,36 @@ interface Props {
   children: React.ReactNode;
 }
 
-/** Header action with a tooltip above on hover (web) or long-press (native). */
+const isWeb = Platform.OS === "web";
+
+/** Web: hint on hover. Phone: always-visible one-word label under the icon. */
 export function HeaderIconButton({ hint, onPress, accessibilityLabel, style, children }: Props) {
-  const [show, setShow] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   return (
     <View style={styles.wrap} collapsable={false}>
-      {show ? (
+      {isWeb && hovered ? (
         <View style={styles.tooltip} pointerEvents="none">
-        <Text style={styles.tooltipText} numberOfLines={1}>
-          {hint}
-        </Text>
+          <Text style={styles.tooltipText} numberOfLines={1}>
+            {hint}
+          </Text>
         </View>
       ) : null}
       <Pressable
         onPress={onPress}
-        onHoverIn={() => setShow(true)}
-        onHoverOut={() => setShow(false)}
-        onLongPress={() => setShow(true)}
-        onPressOut={() => {
-          if (Platform.OS !== "web") setShow(false);
-        }}
-        delayLongPress={350}
+        onHoverIn={() => setHovered(true)}
+        onHoverOut={() => setHovered(false)}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? hint}
-        accessibilityHint={hint}
-        style={({ hovered, pressed }) => [
-          style,
-          (hovered || pressed) && styles.hovered,
-        ]}
+        style={({ pressed }) => [style, (hovered || pressed) && styles.pressed]}
       >
         {children}
       </Pressable>
+      {!isWeb ? (
+        <Text style={styles.caption} numberOfLines={1}>
+          {hint}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -57,6 +55,7 @@ const styles = StyleSheet.create({
   wrap: {
     position: "relative",
     zIndex: 20,
+    alignItems: "center",
   },
   tooltip: {
     position: "absolute",
@@ -73,13 +72,7 @@ const styles = StyleSheet.create({
     zIndex: 50,
     ...Platform.select({
       web: { boxShadow: "0 8px 20px rgba(0,0,0,0.35)" } as object,
-      default: {
-        shadowColor: "#000",
-        shadowOpacity: 0.35,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 8,
-      },
+      default: {},
     }),
   },
   tooltipText: {
@@ -89,5 +82,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 14,
   },
-  hovered: { opacity: 0.88 },
+  caption: {
+    marginTop: 4,
+    fontSize: 9,
+    fontFamily: "Inter_600SemiBold",
+    color: "rgba(255,255,255,0.55)",
+    textAlign: "center",
+    maxWidth: 48,
+  },
+  pressed: { opacity: 0.88 },
 });
