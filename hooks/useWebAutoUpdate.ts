@@ -1,39 +1,48 @@
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 
-const STORAGE_KEY = "@boniface_web_build_id";
-/** Check for a new web deploy at least every 6 hours while the app is open. */
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+import { WEB_BUILD_ID } from "@/lib/generated/webBuildId";
+
+const RELOAD_GUARD_KEY = "@boniface_web_reload_for";
+/** Recheck while the tab stays open (also checks on every refresh / tab focus). */
+const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 
 interface VersionPayload {
   buildId?: string;
-  commit?: string;
-  version?: string;
-  label?: string;
 }
 
 async function fetchLiveBuildId(): Promise<string | null> {
   const url = `/boniface-version.json?cb=${Date.now()}`;
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await fetch(url, { cache: "no-store", headers: { "Cache-Control": "no-cache" } });
   if (!res.ok) return null;
   const data = (await res.json()) as VersionPayload;
   return data.buildId?.trim() || null;
 }
 
-function readStoredBuildId(): string | null {
+function alreadyReloadedFor(id: string): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    return sessionStorage.getItem(RELOAD_GUARD_KEY) === id;
   } catch {
-    return null;
+    return false;
   }
 }
 
-function storeBuildId(id: string): void {
+function markReloadedFor(id: string): void {
   try {
-    localStorage.setItem(STORAGE_KEY, id);
+    sessionStorage.setItem(RELOAD_GUARD_KEY, id);
   } catch {
-    /* private mode / blocked */
+    /* ignore */
   }
+}
+
+function hardReload(liveId: string): void {
+  if (typeof window === "undefined") return;
+  if (alreadyReloadedFor(liveId)) return;
+  markReloadedFor(liveId);
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("_b", liveId);
+  window.location.replace(url.toString());
 }
 
 async function checkForWebUpdate(): Promise<void> {
@@ -42,21 +51,15 @@ async function checkForWebUpdate(): Promise<void> {
   const liveId = await fetchLiveBuildId();
   if (!liveId) return;
 
-  const stored = readStoredBuildId();
-  if (!stored) {
-    storeBuildId(liveId);
-    return;
-  }
-
-  if (stored !== liveId) {
-    storeBuildId(liveId);
-    window.location.reload();
+  // Compare the JS that is actually running — not a leftover localStorage id.
+  if (WEB_BUILD_ID && WEB_BUILD_ID !== liveId) {
+    hardReload(liveId);
   }
 }
 
 /**
- * Friends opening boniface.expo.app auto-reload when a new deploy is published.
- * Checks on open and every 6 hours while the tab stays open.
+ * On every open/refresh, compare this page's build id to the live deploy.
+ * If a newer deploy exists, force a cache-busting reload so friends get updates.
  */
 export function useWebAutoUpdate(): void {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -66,11 +69,21 @@ export function useWebAutoUpdate(): void {
 
     checkForWebUpdate().catch(() => {});
 
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        checkForWebUpdate().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
     timerRef.current = setInterval(() => {
       checkForWebUpdate().catch(() => {});
     }, CHECK_INTERVAL_MS);
 
     return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
