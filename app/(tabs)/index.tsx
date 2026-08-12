@@ -154,15 +154,15 @@ export default function DashboardScreen() {
               <Text style={styles.venueName} numberOfLines={1}>{venueName}</Text>
               <Feather name="chevron-down" size={16} color="#F59E0B" />
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.headerRight}>
             <View style={[styles.dateChip, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
               <Feather name="calendar" size={11} color="rgba(245,158,11,0.9)" />
               <Text style={styles.dateChipText}>{dateLabel}</Text>
               <View style={styles.dateChipSep} />
               <Text style={styles.dateChipTime}>{timeStr}</Text>
             </View>
-          </View>
-
-          <View style={styles.headerRight}>
             <HeaderIconButton
               hint={tr.home.hintSearch}
               onPress={() => router.navigate("/search" as any)}
@@ -591,11 +591,11 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20, zIndex: 30, overflow: "visible" },
-  headerLeft: { flex: 1, gap: 8, paddingRight: 12 },
+  headerLeft: { flex: 1, paddingRight: 12, justifyContent: "center" },
   venueNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   venueName: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#F59E0B" },
   dateChip: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     alignItems: "center",
     gap: 7,
     paddingHorizontal: 10,
