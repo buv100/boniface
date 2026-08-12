@@ -8,8 +8,10 @@ function resolveApiBase(): string {
   if (fromEnv) {
     return fromEnv.replace(/\/+$/, "");
   }
-  // Local Express API — works for web and simulators when the API runs on the host.
-  // Override with EXPO_PUBLIC_API_URL for physical devices (e.g. http://192.168.x.x:3001/api).
+  if (Platform.OS === "web" && !__DEV__) {
+    // Production web — cloud API (friends' phones can't reach localhost).
+    return "https://boniface-api.onrender.com/api";
+  }
   if (Platform.OS === "web" || __DEV__) {
     return "http://localhost:3001/api";
   }

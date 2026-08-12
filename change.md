@@ -12,6 +12,12 @@
 - **איפה שונה באפליקציה:** מסך / מודל / זרימה למשתמש (או «אין — מסמכים בלבד»)
 ```
 
+### 2026-08-12 — גרסת Web לחברים (PWA + Expo Hosting)
+- **מה השתנה:** ייצוא Web סטטי, PWA (`display: standalone`), פריסה ל־`https://boniface.expo.app`, fallback API בענן ב־`lib/api.ts`, סקריפטים `export:web` / `deploy:web`.
+- **למה:** לשלוח לחברים קישור מיידי בזמן שבניית APK נכשלת/בתור; «הוסף למסך הבית» נראה כמו אפליקציה.
+- **איפה שונה בקוד:** `app.json`, `package.json`, `lib/api.ts`, `change.md`
+- **איפה שונה באפליקציה:** חברים פותחים קישור בדפדפן / מוסיפים למסך הבית
+
 ### 2026-08-12 — תיקון EAS Android (New Architecture ל־Reanimated 4)
 - **מה השתנה:** `newArchEnabled: true`, `expo-build-properties`, `react-native-reanimated/plugin` ב־Babel.
 - **למה:** הבנייה נכשלה ב־`assertNewArchitectureEnabledTask` (Reanimated 4 + Worklets דורשים New Arch).

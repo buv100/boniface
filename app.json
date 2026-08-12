@@ -26,13 +26,21 @@
       }
     },
     "web": {
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/icon.png",
+      "bundler": "metro",
+      "output": "static",
+      "name": "Boniface",
+      "shortName": "Boniface",
+      "display": "standalone",
+      "orientation": "portrait",
+      "themeColor": "#111827",
+      "backgroundColor": "#111827"
     },
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://boniface.expo.app"
         }
       ],
       "expo-font",
