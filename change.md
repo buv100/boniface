@@ -12,6 +12,18 @@
 - **איפה שונה באפליקציה:** מסך / מודל / זרימה למשתמש (או «אין — מסמכים בלבד»)
 ```
 
+### 2026-08-12 — עדכון אוטומטי לחברים (Web + פריסה יומית)
+- **מה השתנה:** `boniface-version.json` בכל ייצוא; `useWebAutoUpdate` בודק גרסה בפתיחה ובכל 6 שעות ומרענן אם יש דיפלוי חדש; GitHub Action מפריס ל־`boniface.expo.app` בכל push ל־`main` ופעם ביום (08:00 ישראל).
+- **למה:** חברים עם אותו קישור יקבלו עדכונים בלי Ctrl+F5 ובלי לשלוח קישור חדש.
+- **איפה שונה בקוד:** `.github/workflows/deploy-web.yml`, `hooks/useWebAutoUpdate.ts`, `scripts/write-web-version.mjs`, `lib/generated/webBuildId.ts`, `app/_layout.tsx`, `package.json`, `public/boniface-version.json`, `change.md`
+- **איפה שונה באפליקציה:** ב־Web — רענון אוטומטי כשיש גרסה חדשה (דורש `EXPO_TOKEN` ב־GitHub Secrets לפריסה היומית)
+
+### 2026-08-12 — צ׳אט נשאר פתוח + Enter שולח + ידע מלא (עלות משקה/רווח)
+- **מה השתנה:** מצב פתיחת הצ׳אט ב־`AssistantChatContext` (לא נסגר בניווט); ניווט אוטומטי רק אם המשתמש ביקש במפורש («פתח/עבור/שלח אותי»); Enter שולח (Shift+Enter = שורה חדשה ב־Web); פרומפט מלא לכל פעולות האפליקציה; `beverageCost` בקונטקסט (ממוצע עלות %, מרווח, נוסחת יעד רווח).
+- **למה:** הצ׳אט נסגר אחרי תשובה; Enter לא שלח; העוזר לא ידע לחשב עלות משקה / כמה מכירות צריך ליעד רווח.
+- **איפה שונה בקוד:** `components/AssistantFab.tsx`, `app/assistant.tsx`, `context/AssistantChatContext.tsx`, `lib/assistantInput.ts`, `lib/assistantContext.ts`, `lib/assistantBeverageCost.ts`, `lib/translations.ts`, `server/src/routes/assistant.ts`, `server/src/assistant/context.ts`, `server/src/assistant/beverageCost.ts`, `change.md`
+- **איפה שונה באפליקציה:** חלון צ׳אט נשאר פתוח; Enter שולח; כפתור «פתח מסך»; תשובות על עלות משקה ורווח לפי נתוני המקום
+
 ### 2026-08-12 — גרסת Web לחברים (PWA + Expo Hosting)
 - **מה השתנה:** ייצוא Web סטטי, PWA (`display: standalone`), פריסה ל־`https://boniface.expo.app`, fallback API בענן ב־`lib/api.ts`, סקריפטים `export:web` / `deploy:web`.
 - **למה:** לשלוח לחברים קישור מיידי בזמן שבניית APK נכשלת/בתור; «הוסף למסך הבית» נראה כמו אפליקציה.
