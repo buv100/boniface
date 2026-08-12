@@ -20,6 +20,7 @@ import { AssistantChatProvider } from "@/context/AssistantChatContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { BonifaceProvider } from "@/context/BonifaceContext";
 import { LangProvider } from "@/context/LangContext";
+import { useWebAutoUpdate } from "@/hooks/useWebAutoUpdate";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -66,6 +67,8 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  useWebAutoUpdate();
+
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
