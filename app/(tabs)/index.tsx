@@ -20,6 +20,7 @@ import { ShiftCard } from "@/components/ShiftCard";
 import { StartShiftModal } from "@/components/StartShiftModal";
 import { TipsEntryModal } from "@/components/TipsEntryModal";
 import { VenuePickerModal } from "@/components/VenuePickerModal";
+import { HeaderIconButton } from "@/components/HeaderIconButton";
 import { HintBanner, PrimaryButton } from "@/components/ui/EasyUI";
 import {
   DayEntry,
@@ -137,9 +138,6 @@ export default function DashboardScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Ambient gold glow */}
-      <View style={styles.glowOrb} pointerEvents="none" />
-
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: topPad + 12, paddingBottom: bottomPad }]}
         showsVerticalScrollIndicator={false}
@@ -159,35 +157,30 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity
-              style={[styles.alertBtn, { backgroundColor: "rgba(245,158,11,0.15)", borderColor: "rgba(245,158,11,0.35)" }]}
-              onPress={() => router.navigate("/assistant" as any)}
-              accessibilityRole="button"
-              accessibilityLabel={tr.more.assistantItem}
-            >
-              <Feather name="cpu" size={14} color="#F59E0B" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.alertBtn, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}
+            <HeaderIconButton
+              hint={tr.home.hintSearch}
               onPress={() => router.navigate("/search" as any)}
+              style={[styles.alertBtn, { backgroundColor: "rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.12)" }]}
             >
               <Feather name="search" size={14} color="rgba(255,255,255,0.7)" />
-            </TouchableOpacity>
+            </HeaderIconButton>
             {lowStockCount > 0 && (
-              <TouchableOpacity
-                style={[styles.alertBtn, { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.25)" }]}
+              <HeaderIconButton
+                hint={tr.home.hintLowStock}
                 onPress={() => router.navigate("/bar")}
+                style={[styles.alertBtn, { backgroundColor: "rgba(239,68,68,0.12)", borderColor: "rgba(239,68,68,0.25)" }]}
               >
                 <Feather name="alert-triangle" size={14} color="#EF4444" />
                 <Text style={styles.alertBtnText}>{lowStockCount}</Text>
-              </TouchableOpacity>
+              </HeaderIconButton>
             )}
-            <TouchableOpacity
-              style={[styles.avatar, { backgroundColor: colors.primary }]}
+            <HeaderIconButton
+              hint={tr.home.hintAccount}
               onPress={() => router.navigate("/account")}
+              style={[styles.avatar, { backgroundColor: colors.primary }]}
             >
               <Text style={styles.avatarText}>{managerInitial}</Text>
-            </TouchableOpacity>
+            </HeaderIconButton>
           </View>
         </View>
 
@@ -590,21 +583,15 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  glowOrb: {
-    position: "absolute", top: -80, right: -60,
-    width: 280, height: 280, borderRadius: 140,
-    backgroundColor: "rgba(245,158,11,0.07)",
-    zIndex: 0,
-  },
   scroll: { paddingHorizontal: 16, zIndex: 1 },
 
   // Header
-  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 },
+  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, zIndex: 30, overflow: "visible" },
   headerLeft: { flex: 1 },
   venueNameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   venueName: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#F59E0B" },
   dateLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8, zIndex: 31, overflow: "visible" },
   alertBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
   alertBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#EF4444" },
   avatar: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },

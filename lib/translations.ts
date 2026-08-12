@@ -51,6 +51,9 @@ const t = {
       stockLowWord: "мало",
       stopListTitle: (n: number) => `Стоп-лист · ${n}`,
       nextLabel: "Что дальше",
+      hintSearch: "Поиск по сотрудникам, складу и истории",
+      hintLowStock: "Мало на складе — открыть бар",
+      hintAccount: "Аккаунт и настройки входа",
     },
     team: {
       title: "Команда",
@@ -830,6 +833,9 @@ const t = {
       stockLowWord: "low",
       stopListTitle: (n: number) => `Stop-list · ${n}`,
       nextLabel: "Next step",
+      hintSearch: "Search employees, stock, and history",
+      hintLowStock: "Low stock — open the bar",
+      hintAccount: "Account and login settings",
     },
     team: {
       title: "Team",
@@ -1609,6 +1615,9 @@ const t = {
       stockLowWord: "חסר",
       stopListTitle: (n: number) => `סטופ-ליסט · ${n}`,
       nextLabel: "הצעד הבא",
+      hintSearch: "חיפוש עובדים, מלאי והיסטוריה",
+      hintLowStock: "מלאי נמוך — פתיחת מסך הבר",
+      hintAccount: "חשבון והגדרות התחברות",
     },
     team: {
       title: "צוות",
