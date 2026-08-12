@@ -1,4 +1,5 @@
-import { getLocalizedStockItem, type HappyHour, type StockItem, type StopListItem, type WriteOff, type Checklist, type ShiftState } from "@/context/BonifaceContext";
+import { getLocalizedStockItem, type HappyHour, type StockItem, type StopListItem, type WriteOff, type Checklist, type ShiftState, calcBeverageCost } from "@/context/BonifaceContext";
+import { summarizeBeverageCost } from "@/lib/assistantBeverageCost";
 import type { DayEntry, Employee } from "@/context/AppContext";
 import { calcDayResults } from "@/context/AppContext";
 import type { AuthEmployee, AuthManager, AuthVenue } from "@/context/AuthContext";
@@ -59,6 +60,20 @@ export interface AssistantLiveContext {
     enabled: boolean;
     activeNow: boolean;
   }>;
+  beverageCost: {
+    averageCostPercent: number | null;
+    averageProfitMarginPercent: number | null;
+    itemsWithPricing: number;
+    itemsMissingPricing: number;
+    items: Array<{
+      name: string;
+      category: string;
+      costPercent: number;
+      profitMarginPercent: number;
+      costPerPortion: number;
+      sellingPrice: number;
+    }>;
+  };
 }
 
 type SeedTr = {
@@ -93,9 +108,33 @@ export function buildAssistantLiveContext(opts: {
       isLow: item.quantity < item.minQuantity,
       subCategory: item.subCategory,
       purchasePrice: item.purchasePrice,
+      portionsPerUnit: raw.portionsPerUnit,
       sellingPrice: item.sellingPrice,
     };
   });
+
+  const beverageSummary = summarizeBeverageCost(opts.stockItems);
+  const beverageItems = opts.stockItems
+    .filter(
+      (s) =>
+        s.purchasePrice != null &&
+        s.portionsPerUnit != null &&
+        s.sellingPrice != null &&
+        s.portionsPerUnit > 0 &&
+        s.sellingPrice > 0
+    )
+    .map((s) => {
+      const item = opts.tr ? getLocalizedStockItem(s, opts.tr as any) : s;
+      const costPercent = calcBeverageCost(s.purchasePrice!, s.portionsPerUnit!, s.sellingPrice!);
+      return {
+        name: item.name,
+        category: item.category,
+        costPercent: Math.round(costPercent * 10) / 10,
+        profitMarginPercent: Math.round((100 - costPercent) * 10) / 10,
+        costPerPortion: Math.round((s.purchasePrice! / s.portionsPerUnit!) * 100) / 100,
+        sellingPrice: s.sellingPrice!,
+      };
+    });
 
   const stockByCategory: Record<string, { items: number; totalQuantity: number }> = {};
   for (const s of stock) {
@@ -203,6 +242,13 @@ export function buildAssistantLiveContext(opts: {
       enabled: h.enabled,
       activeNow: opts.activeHappyHourId === h.id,
     })),
+    beverageCost: {
+      averageCostPercent: beverageSummary.averageCostPercent,
+      averageProfitMarginPercent: beverageSummary.averageProfitMarginPercent,
+      itemsWithPricing: beverageSummary.itemsWithPricing,
+      itemsMissingPricing: beverageSummary.itemsMissingPricing,
+      items: beverageItems,
+    },
   };
 }
 

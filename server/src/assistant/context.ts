@@ -1,3 +1,4 @@
+import { summarizeBeverageCost } from "./beverageCost";
 import { dayEntriesRepo } from "../dal/dayEntriesRepo";
 import { employeesRepo } from "../dal/employeesRepo";
 import { stockRepo } from "../dal/stockRepo";
@@ -91,6 +92,7 @@ export function loadVenueAssistantContext(venueId: string, role: string) {
       done: c.items.filter((i) => i.done).length,
       total: c.items.length,
     })),
+    beverageCost: summarizeBeverageCost(stock),
   };
 }
 
@@ -139,6 +141,7 @@ export function mergeAssistantContexts(clientCtx: unknown, serverCtx: unknown | 
       myTips: c.myTips ?? s.myTips,
       shift: c.shift ?? s.shift,
       happyHours: c.happyHours ?? s.happyHours,
+      beverageCost: c.beverageCost ?? s.beverageCost,
       mergedFrom: ["client", "server"],
     };
   }

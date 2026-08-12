@@ -19,9 +19,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useLang } from "@/context/LangContext";
+import { useAssistantChat } from "@/context/AssistantChatContext";
 import { useColors } from "@/hooks/useColors";
 import { useAssistantLiveContext } from "@/hooks/useAssistantLiveContext";
 import { apiCall, getStoredToken } from "@/lib/api";
+import { handleAssistantEnterKey, userAskedToNavigate, getAssistantTextInputKeyProps } from "@/lib/assistantInput";
 import { isAllowedAssistantRoute, normalizeAssistantRoute } from "@/lib/assistantNav";
 import { navigateAssistantRoute } from "@/lib/navigateAssistant";
 
@@ -31,6 +33,7 @@ interface ChatBubble {
   id: string;
   role: ChatRole;
   content: string;
+  navigate?: string;
 }
 
 const SUGGESTION_KEYS = ["tip1", "tip2", "tip3", "tip4"] as const;
@@ -39,11 +42,11 @@ export function AssistantFab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tr, isRTL } = useLang();
+  const { open, openChat, closeChat } = useAssistantChat();
   const liveContext = useAssistantLiveContext();
   const pathname = usePathname();
   const { height: winH } = useWindowDimensions();
 
-  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatBubble[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -68,7 +71,7 @@ export function AssistantFab() {
     );
   }, [open, tr.assistant.welcome]);
 
-  const close = () => setOpen(false);
+  const close = () => closeChat();
 
   const send = async (raw: string) => {
     const text = raw.trim();
@@ -102,20 +105,23 @@ export function AssistantFab() {
         }
       );
 
+      const navRoute =
+        res.navigate && isAllowedAssistantRoute(normalizeAssistantRoute(res.navigate))
+          ? normalizeAssistantRoute(res.navigate)
+          : undefined;
+
       setMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
           role: "assistant",
           content: res.reply || tr.assistant.emptyReply,
+          navigate: navRoute,
         },
       ]);
 
-      if (res.navigate && isAllowedAssistantRoute(normalizeAssistantRoute(res.navigate))) {
-        setTimeout(() => {
-          close();
-          navigateAssistantRoute(res.navigate!);
-        }, 450);
+      if (navRoute && navRoute !== "/assistant" && userAskedToNavigate(text)) {
+        setTimeout(() => navigateAssistantRoute(navRoute), 400);
       }
     } catch (e) {
       const msg =
@@ -132,7 +138,10 @@ export function AssistantFab() {
     }
   };
 
-  if (onFullAssistant) return null;
+  // Keep overlay mounted while open (survives navigation). Hide chrome on full-screen assistant when closed.
+  if (onFullAssistant && !open) return null;
+
+  const showFab = !open;
 
   const sideStyle = isRTL
     ? { left: 16 }
@@ -140,7 +149,7 @@ export function AssistantFab() {
 
   return (
     <>
-      {!open && (
+      {showFab && (
         <TouchableOpacity
           style={[
             styles.fab,
@@ -153,7 +162,7 @@ export function AssistantFab() {
           ]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setOpen(true);
+            openChat();
           }}
           accessibilityRole="button"
           accessibilityLabel={tr.assistant.fabLabel}
@@ -169,8 +178,9 @@ export function AssistantFab() {
         animationType="fade"
         onRequestClose={close}
         statusBarTranslucent
+        presentationStyle="overFullScreen"
       >
-        <View style={styles.modalRoot}>
+        <View style={styles.modalRoot} pointerEvents="box-none">
           <Pressable style={styles.backdrop} onPress={close} accessibilityLabel={tr.assistant.close} />
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -178,6 +188,7 @@ export function AssistantFab() {
             pointerEvents="box-none"
           >
             <View
+              pointerEvents="auto"
               style={[
                 styles.panel,
                 {
@@ -260,6 +271,25 @@ export function AssistantFab() {
                         >
                           {item.content}
                         </Text>
+                        {!mine && item.navigate ? (
+                          <TouchableOpacity
+                            style={[
+                              styles.navBtn,
+                              {
+                                borderColor: colors.primary,
+                                alignSelf: isRTL ? "flex-end" : "flex-start",
+                              },
+                            ]}
+                            onPress={() => navigateAssistantRoute(item.navigate!)}
+                            accessibilityRole="button"
+                            accessibilityLabel={tr.assistant.openScreen}
+                          >
+                            <Feather name="external-link" size={12} color={colors.primary} />
+                            <Text style={[styles.navBtnText, { color: colors.primary }]}>
+                              {tr.assistant.openScreen}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     </View>
                   );
@@ -321,7 +351,13 @@ export function AssistantFab() {
                   onChangeText={setInput}
                   multiline
                   editable={!sending}
-                  onSubmitEditing={() => send(input)}
+                  blurOnSubmit={false}
+                  returnKeyType="send"
+                  onSubmitEditing={() => {
+                    if (Platform.OS !== "web") send(input);
+                  }}
+                  onKeyPress={(e) => handleAssistantEnterKey(e, input, send, sending)}
+                  {...getAssistantTextInputKeyProps(input, send, sending)}
                 />
                 <TouchableOpacity
                   style={[
@@ -372,6 +408,7 @@ const styles = StyleSheet.create({
   },
   panelWrap: {
     paddingHorizontal: 12,
+    zIndex: 2,
   },
   panel: {
     borderRadius: 18,
@@ -411,6 +448,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   bubbleText: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 20 },
+  navBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  navBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   suggestions: { marginTop: 4, gap: 8 },
   suggestLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   suggestRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },

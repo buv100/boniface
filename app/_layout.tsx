@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AssistantFab } from "@/components/AssistantFab";
 import { AppProvider } from "@/context/AppContext";
+import { AssistantChatProvider } from "@/context/AssistantChatContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { BonifaceProvider } from "@/context/BonifaceContext";
 import { LangProvider } from "@/context/LangContext";
@@ -90,8 +91,10 @@ export default function RootLayout() {
                 <LangProvider>
                   <GestureHandlerRootView style={{ flex: 1 }}>
                     <KeyboardProvider>
-                      <RootLayoutNav />
-                      <AssistantFab />
+                      <AssistantChatProvider>
+                        <RootLayoutNav />
+                        <AssistantFab />
+                      </AssistantChatProvider>
                     </KeyboardProvider>
                   </GestureHandlerRootView>
                 </LangProvider>

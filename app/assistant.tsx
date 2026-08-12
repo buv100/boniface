@@ -19,6 +19,7 @@ import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 import { useAssistantLiveContext } from "@/hooks/useAssistantLiveContext";
 import { apiCall, getStoredToken } from "@/lib/api";
+import { handleAssistantEnterKey, userAskedToNavigate, getAssistantTextInputKeyProps } from "@/lib/assistantInput";
 import { isAllowedAssistantRoute, normalizeAssistantRoute } from "@/lib/assistantNav";
 import { navigateAssistantRoute } from "@/lib/navigateAssistant";
 
@@ -28,6 +29,7 @@ interface ChatBubble {
   id: string;
   role: ChatRole;
   content: string;
+  navigate?: string;
 }
 
 const SUGGESTION_KEYS = ["tip1", "tip2", "tip3", "tip4"] as const;
@@ -86,17 +88,23 @@ export default function AssistantScreen() {
         }
       );
 
+      const navRoute =
+        res.navigate && isAllowedAssistantRoute(normalizeAssistantRoute(res.navigate))
+          ? normalizeAssistantRoute(res.navigate)
+          : undefined;
+
       setMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
           role: "assistant",
           content: res.reply || tr.assistant.emptyReply,
+          navigate: navRoute,
         },
       ]);
 
-      if (res.navigate && isAllowedAssistantRoute(normalizeAssistantRoute(res.navigate))) {
-        setTimeout(() => navigateAssistantRoute(res.navigate!), 600);
+      if (navRoute && navRoute !== "/assistant" && userAskedToNavigate(text)) {
+        setTimeout(() => navigateAssistantRoute(navRoute), 500);
       }
     } catch (e) {
       const msg =
@@ -189,6 +197,25 @@ export default function AssistantScreen() {
                   >
                     {item.content}
                   </Text>
+                  {!mine && item.navigate ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.navBtn,
+                        {
+                          borderColor: colors.primary,
+                          alignSelf: isRTL ? "flex-end" : "flex-start",
+                        },
+                      ]}
+                      onPress={() => navigateAssistantRoute(item.navigate!)}
+                      accessibilityRole="button"
+                      accessibilityLabel={tr.assistant.openScreen}
+                    >
+                      <Feather name="external-link" size={12} color={colors.primary} />
+                      <Text style={[styles.navBtnText, { color: colors.primary }]}>
+                        {tr.assistant.openScreen}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </View>
             );
@@ -251,7 +278,13 @@ export default function AssistantScreen() {
             onChangeText={setInput}
             multiline
             editable={!sending}
-            onSubmitEditing={() => send(input)}
+            blurOnSubmit={false}
+            returnKeyType="send"
+            onSubmitEditing={() => {
+              if (Platform.OS !== "web") send(input);
+            }}
+            onKeyPress={(e) => handleAssistantEnterKey(e, input, send, sending)}
+            {...getAssistantTextInputKeyProps(input, send, sending)}
           />
           <TouchableOpacity
             style={[
@@ -310,6 +343,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   bubbleText: { fontSize: 15, fontFamily: "Inter_400Regular", lineHeight: 22 },
+  navBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  navBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   suggestions: { marginTop: 8, gap: 10 },
   suggestLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   suggestRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
