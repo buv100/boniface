@@ -46,7 +46,7 @@ function makeFreshEntry(date: string): DayEntry {
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { tr } = useLang();
+  const { tr, isRTL } = useLang();
   const { dayEntries, saveDayEntry, employees } = useApp();
   const { shiftState, startShift, endShift, lowStockCount, stopList, checklists } = useBoniface();
   const { venue, manager, subscriptionExpired } = useAuth();
@@ -114,6 +114,7 @@ export default function DashboardScreen() {
   const totalTips = draft.totalCash + draft.totalCard;
 
   const now = new Date();
+  void tick;
   const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 + 84 : 84 + insets.bottom;
@@ -153,7 +154,12 @@ export default function DashboardScreen() {
               <Text style={styles.venueName} numberOfLines={1}>{venueName}</Text>
               <Feather name="chevron-down" size={12} color="#F59E0B" />
             </TouchableOpacity>
-            <Text style={[styles.dateLabel, { color: colors.mutedForeground }]}>{dateLabel}</Text>
+            <View style={[styles.dateChip, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
+              <Feather name="calendar" size={11} color="rgba(245,158,11,0.9)" />
+              <Text style={styles.dateChipText}>{dateLabel}</Text>
+              <View style={styles.dateChipSep} />
+              <Text style={styles.dateChipTime}>{timeStr}</Text>
+            </View>
           </View>
 
           <View style={styles.headerRight}>
@@ -586,11 +592,24 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16, zIndex: 1 },
 
   // Header
-  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, zIndex: 30, overflow: "visible" },
-  headerLeft: { flex: 1 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20, zIndex: 30, overflow: "visible" },
+  headerLeft: { flex: 1, gap: 8, paddingRight: 12 },
   venueNameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   venueName: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#F59E0B" },
-  dateLabel: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
+  dateChip: {
+    alignSelf: "flex-start",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  dateChipText: { fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.72)" },
+  dateChipSep: { width: 1, height: 11, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 1 },
+  dateChipTime: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#F9FAFB", letterSpacing: 0.4, fontVariant: ["tabular-nums"] },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8, zIndex: 31, overflow: "visible" },
   alertBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
   alertBtnText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#EF4444" },

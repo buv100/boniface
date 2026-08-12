@@ -25,7 +25,9 @@ export function HeaderIconButton({ hint, onPress, accessibilityLabel, style, chi
     <View style={styles.wrap} collapsable={false}>
       {show ? (
         <View style={styles.tooltip} pointerEvents="none">
-          <Text style={styles.tooltipText}>{hint}</Text>
+        <Text style={styles.tooltipText} numberOfLines={1}>
+          {hint}
+        </Text>
         </View>
       ) : null}
       <Pressable
@@ -65,9 +67,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    maxWidth: 180,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    maxWidth: 140,
     zIndex: 50,
     ...Platform.select({
       web: { boxShadow: "0 8px 20px rgba(0,0,0,0.35)" } as object,
@@ -85,7 +87,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_500Medium",
     textAlign: "center",
-    lineHeight: 15,
+    lineHeight: 14,
   },
   hovered: { opacity: 0.88 },
 });
