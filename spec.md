@@ -1,594 +1,123 @@
-# Boniface — אפיון מוצר מלא
+# Boniface — אפיון מוצר
 
-**גרסה:** 1.0 · אוגוסט 2026  
-**סטטוס:** אפיון לבנייה מאפס  
-**מסמך נלווה:** [`rules.md`](rules.md) · [`improvments.md`](improvments.md) · [`שינויים.md`](שינויים.md)
-
----
-
-## 0. מה זה המסמך / מה זה לא
-
-| כן | לא |
-|----|-----|
-| אפיון של **אפליקציית מובייל נייטיב** (iOS + Android) | מוצר ווב / אתר לקוחות |
-| מפרט ליבה + כל ה-roadmap | הצדקה שיווקית ארוכה |
-| דיאגרמות, מודל נתונים, קריטריוני קבלה | מדריך שימוש למשתמש קצה |
-
-**ערוץ הפצה היחיד למוצר:** Apple App Store + Google Play.  
-**GitHub / Markdown בדפדפן:** רק לצפייה באפיון ובקוד בזמן פיתוח — **לא** חלק מהמוצר ולא חוויית משתמש.
+**גרסה:** 2.1 · אוגוסט 2026  
+**סטטוס:** שלב 1 — דשבורד בעל עסק + מנוי ידני + פאנל פלטפורמה  
+**נלווה:** [`rules.md`](rules.md) · [`change.md`](change.md)
 
 ---
 
-## 1. חזון ומיצוב
+## 1. חזון
 
-### 1.1 משפט מוצר
-**Boniface** — אפליקציית ניהול בר לניידים, למנהלי משמרת ובעלי עסק בברים ומסעדות בישראל.
+**Boniface** — מערכת תפעול לרשתות ולעסקים של ברים ומסעדות בישראל.
 
-### 1.2 תגליין
-> ניהול בר באצבע אחת — משמרות, מלאי, טיפים וצוות, בזמן אמת וגם אופליין.
+ארבעה צדדים לוגיים:
 
-### 1.3 עקרונות מוצר (מחייבים)
+1. פלטפורמה — צוות Boniface (פאנל פנימי)
+2. בעל עסק / רשת
+3. מנהל / אחראי משמרת *(מוקפא)*
+4. עובד — ברמן / מלצר / טבח *(מוקפא)*
 
-1. **Mobile-only** — חוויית משתמש מלאה באפליקציה בלבד. אין דשבורד ווב ללקוח.
-2. **Offline-first** — פעולות ליבה עובדות בלי רשת; סנכרון כשיש חיבור.
-3. **One-finger** — מסכים קצרים, פעולות מהירות, haptic feedback, מינימום הקלדה.
-4. **ללא POS ב-v1** — אין אינטגרציית קופה בשלב הראשון.
-5. **שוק ישראלי** — שקל כברירת מחדל, חוק עבודה ישראלי (משמרות), PDPA, RTL לעברית.
-6. **שפות:** עברית · רוסית · אנגלית (עם RTL מלא ל-he).
+**שלב 1** בונה את צד הבעלים ואת שער התשלום. אין הרשמה ציבורית: אנחנו יוצרים את הלקוח ומסמנים «שולם עד». קוד המשמרת הישן נשמר בשרת ובאפליקציה אבל לא מחובר לנווט החדש.
 
-### 1.4 מה במוצר / מה בחוץ (v1 ובכלל)
-
-| בפנים | בחוץ (לפחות ב-v1) |
-|--------|-------------------|
-| משמרות, טיפים, צוות, מלאי בר, סטופ-ליסט, צ'ק-ליסטים | קופה / POS |
-| ממשק מנהל + ממשק עובד | אתר ניהול בדפדפן |
-| מנוי + Feature Cards | מסחר כרטיסים בין משתמשים (עתיד רחוק) |
-| Push, WhatsApp/Email לשיתוף דוחות | סושיאל נטוורק פנימי |
+ערוץ: Expo (iOS, Android, Web). שפות: עברית (RTL) · רוסית · אנגלית. מטבע: ILS.
 
 ---
 
-## 2. קהל יעד ופרסונות
-
-### 2.1 בעל עסק (UP — Owner)
-- בעלים / מנהל כללי של בר אחד או יותר.
-- נרשם עם טלפון + PIN (ושחזור בהמשך).
-- רואה הכל: כספים, צוות, מלאי, מנוי, ריבוי מקומות (Enterprise).
-- נחסם מיד כשהמנוי פג; נתונים נשמרים 3 חודשים ואז נמחקים.
-
-### 2.2 מנהל משמרת
-- מפעיל את האפליקציה במשמרת: פתיחה/סגירה, טיפים, סטופ-ליסט, מלאי, צ'ק-ליסטים.
-- זה המשתמש המרכזי של הליבה היום.
-
-### 2.3 עובד (ברמן / מלצר / וכו')
-- ממשק מצומצם משלו (לא תצוגת מנהל).
-- אונבורדינג בקוד אישי מ-WhatsApp/אימייל.
-- לוקח משמרות, מדווח אזילה, רואה את הדאשבורד שלו.
-- אחרי פקיעת מנוי: גישה עוד חודש.
-
-```mermaid
-flowchart TB
-  subgraph roles [תפקידים]
-    UP[בעל_עסק]
-    SM[מנהל_משמרת]
-    EMP[עובד]
-  end
-  UP -->|מזמין_ומנהל| SM
-  UP -->|שולח_קוד_אונבורדינג| EMP
-  SM -->|מפעיל_משמרת| EMP
-```
-
----
-
-## 3. פלטפורמה והפצה
-
-### 3.1 פלטפורמות יעד
-| פלטפורמה | כלי | חנות |
-|----------|-----|------|
-| iOS | Expo + EAS Build | Apple App Store |
-| Android | Expo + EAS Build | Google Play |
-
-Bundle ID: `com.boniface.barmanager`  
-אוריינטציה: Portrait  
-מצב UI: Dark תמיד
-
-### 3.2 מה לא בונים כמוצר
-- אין Progressive Web App ללקוח.
-- אין פאנל אדמין ווב לבעל העסק (ניהול רק באפליקציה).
-- `server/serve.js` / static web — לכל היותר landing טכני לחנויות, לא האפליקציה עצמה.
-
-### 3.3 Backend (לא UI)
-שרת API + DB בענן לאימות, סנכרון, Push, מנויים.  
-המשתמש **לא** פותח את השרת בדפדפן כחלק מהמוצר.
-
----
-
-## 4. סטאק טכני (מחייב)
-
-| שכבה | טכנולוגיה |
-|------|-----------|
-| Mobile | Expo SDK 54, React Native, expo-router |
-| UI | Reanimated, Blur, LinearGradient, Haptics, Inter |
-| State / Data | TanStack Query, AsyncStorage, Zod |
-| API client | Orval → React Query hooks (מתוך OpenAPI) |
-| Backend | Node.js, Express 5, TypeScript |
-| DB | PostgreSQL + Drizzle ORM |
-| מונוריפו | pnpm workspaces |
-| Build חנויות | EAS (APK/AAB + iOS) |
-| עיצוב | רקע `#111827`, אקסנט זהב `#F59E0B`, dark-only |
-
----
-
-## 5. ארכיטקטורה
-
-```mermaid
-flowchart LR
-  subgraph devices [מכשירי_מובייל]
-    iOS[iPhone_AppStore]
-    Android[Android_PlayStore]
-  end
-  subgraph app [אפליקציית_Expo]
-    UI[מסכים_ומודלים]
-    Local[AsyncStorage_Offline]
-    Sync[שכבת_סנכרון]
-  end
-  subgraph cloud [ענן]
-    API[Express_API]
-    DB[(PostgreSQL)]
-    Push[Push_Notifications]
-    Mail[Email_WhatsApp_שיתוף]
-  end
-  iOS --> UI
-  Android --> UI
-  UI --> Local
-  UI --> Sync
-  Sync --> API
-  API --> DB
-  API --> Push
-  API --> Mail
-```
-
-### 5.1 כללי Offline / Sync
-
-| דומיין | Offline | Sync לענן |
-|--------|---------|-----------|
-| טיפים + יומן ימים | כן | כן (כשמחוברים) |
-| עובדים | כן | כן |
-| משמרת פעילה | כן | כן (לאחר P1) |
-| מלאי / סטופ-ליסט / מחיקות | כן | כן (לאחר P1–P2) |
-| צ'ק-ליסטים | כן | כן |
-| מנוי / Feature Cards | cache מקומי | מקור אמת בשרת |
-
-**קונפליקטים:** Last-write-wins עם חותמת זמן שרת; פעולות קריטיות (סגירת משמרת, טיפים) לא נמחקות בשקט — מוצגת התראה אם נכשל הסנכרון.
-
-```mermaid
-flowchart TD
-  UserAction[פעולת_משתמש_באפליקציה]
-  UserAction --> WriteLocal[כתיבה_ל_AsyncStorage]
-  WriteLocal --> Queue[הוספה_לתור_סנכרון]
-  Queue --> Net{יש_רשת}
-  Net -->|לא| Wait[ממתין_לסנכרון_ב_UI]
-  Net -->|כן| PushAPI[POST_PATCH_לשרת]
-  PushAPI --> Ok{הצלחה}
-  Ok -->|כן| Ack[סימון_סונכרן]
-  Ok -->|לא| Retry[ניסיון_חוזר_אקספוננציאלי]
-  Retry --> Net
-  Pull[פתיחת_אפליקציה_מחוברת] --> Hydrate[משיכה_מהשרת]
-  Hydrate --> Merge[מיזוג_לפי_חותמת_זמן]
-  Merge --> WriteLocal
-```
-
----
-
-## 6. מודל נתונים
-
-```mermaid
-erDiagram
-  VENUE ||--o{ MANAGER : has
-  VENUE ||--o{ EMPLOYEE : has
-  VENUE ||--o{ DAY_ENTRY : has
-  VENUE ||--o{ STOCK_ITEM : has
-  VENUE ||--o{ CHECKLIST : has
-  VENUE ||--o{ STOP_LIST_ITEM : has
-  VENUE ||--o{ WRITE_OFF : has
-  VENUE ||--o{ SHIFT_SLOT : has
-  VENUE ||--o{ MENU_ITEM : has
-  EMPLOYEE ||--o{ SHIFT_ENTRY : works
-  DAY_ENTRY ||--o{ SHIFT_ENTRY : contains
-  EMPLOYEE ||--o{ SHIFT_CLAIM : claims
-  SHIFT_SLOT ||--o{ SHIFT_CLAIM : receives
-  VENUE ||--|| SUBSCRIPTION : billed
-```
-
-### 6.1 ישויות ליבה
-
-**Venue** — `id`, `name`, `currency` (ILS/USD/EUR), `timezone`, `createdAt`  
-**Manager (UP)** — `id`, `venueId`, `name`, `phone`, `pinHash`, `securityQuestion?`, `createdAt`  
-**Employee** — `id`, `venueId`, `name`, `roles[]`, `phone?`, `inviteCode?`, `authPin?`, `onboardedAt?`  
-**DayEntry** — `id`, `venueId`, `date`, `totalCash`, `totalCard`, `shifts[]`  
-**ShiftEntry** — `id`, `employeeId`, `employeeName`, `tipMode` (`hours`|`percent`), `startTime`, `endTime`, `cashPercent`, `cardPercent`  
-**ShiftState (פעיל)** — `active`, `startTime`, `startDate`, `employeeIds[]`, `tipsGoal?`  
-**StockItem** — `id`, `name`, `category`, `quantity`, `unit`, `minQuantity`, `purchasePrice?`, `portionsPerUnit?`, `sellingPrice?`, `expiryDate?`, `subCategory?`, `bottleShape?`  
-**StopListItem** — `id`, `name`, `reason?`, `addedAt`, `shiftScoped`  
-**WriteOff** — `id`, `date`, `itemId?`, `itemName`, `quantity`, `unit`, `reason`, `notes?`  
-**Checklist / ChecklistItem** — `type` (`opening`|`closing`|`preshift`|`custom`), items עם `done`  
-**Subscription** — `status`, `expiresAt`, `plan`, grace לעובדים  
-**ShiftSlot / ShiftClaim** — הזמנת משמרות (P1)  
-**MenuItem / Recipe / Batch** — תפריט וטכנולוגיה (P3)
-
-### 6.2 קטגוריות מלאי (ליבה)
-`spirits` | `wine` | `beer` | `mixers` | `garnish` | `supplies`  
-הרחבה (P2): תת-קטגוריות `Display` / `Speed Bar` / `מחסן` + מותאמות.
-
-### 6.3 תפקידי צוות (תוויות, לא הרשאות מערכת)
-ברמן · מלצר · הוסטס · ברבק · מנהל משמרת · טבח · אבטחה
-
----
-
-## 7. אימות, הרשאות ומנוי
-
-### 7.1 Auth — בעל עסק / מנהל
-1. הרשמה: שם מקום + שם מנהל + טלפון + PIN (≥4).
-2. התחברות: טלפון + PIN.
-3. שחזור (P1): אימייל + שאלת אבטחה.
-4. Session: Bearer token; `GET /auth/me` בבוטסטראפ.
-
-### 7.2 Auth — עובד (P1)
-1. UP שולח קישור WhatsApp/Email עם קוד אישי.
-2. העובד מוריד מהחנות → מזין קוד → מגדיר פרופיל/PIN → דאשבורד עובד.
-3. שחזור גישה רק דרך UP (איפוס קוד/PIN).
-
-```mermaid
-flowchart TD
-  UP_Reg[UP_נרשם_טלפון_ו_PIN]
-  UP_Reg --> Token[Bearer_Session]
-  Token --> Invite[UP_יוצר_קוד_הזמנה]
-  Invite --> Share[שליחה_WhatsApp_או_Email]
-  Share --> Store[עובד_מוריד_מ_AppStore_או_Play]
-  Store --> EnterCode[הזנת_קוד_באפליקציה]
-  EnterCode --> Valid{קוד_תקף}
-  Valid -->|לא| Reject[שגיאה_וניסיון_חוזר]
-  Valid -->|כן| Profile[הגדרת_פרופיל_ו_PIN]
-  Profile --> EmpDash[דאשבורד_עובד]
-  UP_Forgot[שחזור_UP] --> EmailQ[אימייל_ושאלת_אבטחה]
-  EmailQ --> ResetPIN[איפוס_PIN]
-  Emp_Forgot[שחזור_עובד] --> ViaUP[איפוס_רק_דרך_UP]
-```
-
-### 7.3 התנהגות מנוי שפג
-
-```mermaid
-flowchart TD
-  Expired[מנוי_פג]
-  Expired --> UP_Block[UP_נחסם_מיד]
-  Expired --> Emp_Grace[עובדים_עוד_חודש]
-  UP_Block --> Warn[אזהרה_מתחת_לטופס_התחברות]
-  UP_Block --> Retain[נתונים_נשמרים_3_חודשים]
-  Retain --> Delete[מחיקה_אוטומטית]
-```
-
-### 7.4 תמחור (בסיס)
-- מנוי בסיסי: **₪26 / חודש** (ניתן לעדכון ב-Feature Cards / סוף).
-- Feature Cards בסגנון RPG (Common → Legendary) לפתיחת יכולות פרימיום.
-- רכישה: In-App Purchase (App Store / Play) — מקור אמת בחנויות + אימות בשרת.
-- אין דשבורד תשלומים בדפדפן למשתמש.
-
----
-
-## 8. מפת מסכים (אפליקציה)
-
-### 8.1 ניווט מנהל (קיים + יעד)
+## 2. מודל ארגוני
 
 ```
-Root Stack
-├── (tabs)
-│   ├── Home          דאשבורד משמרת 3-שלבי
-│   ├── Team          צוות
-│   ├── Quick         פעולות מהירות (מרכז)
-│   ├── Bar           מלאי / בר
-│   └── More          הגדרות, שפה, כרטיסים, חשבון
-├── Cards             Feature Cards
-├── Account           הרשמה / התחברות / מקום
-├── Briefing          תדריך לפני משמרת
-├── Schedule          לוח שבועי + הזמנת משמרות
-├── History           היסטוריית ימים
-├── Stats             אנליטיקה
-└── Search            חיפוש גלובלי (P1)
+Owner ──1── Organization (רשת/עסק)
+                 │
+                 └── N Venues (סניף: בר או מסעדה)
 ```
 
-### 8.2 ממשק עובד (P1) — מצב נפרד
-- בית: המשמרת שלי / הזמנת משמרות
-- דיווח אזילה → סטופ-ליסט
-- צ'ק-ליסטים שהוקצו
-- פרופיל + טיפים שלי (קריאה)
-- **אין** גישה להגדרות מקום, מחיקת צוות, מנוי, מלאי מלא
+- בעלים **לא** נרשם לבד. צוות Boniface יוצר אדם (שם, טלפון, אימייל, PIN) + עסק + סניף ראשון.
+- מנוי ברמת הארגון: `org_subscriptions` (`status`, `expires_at`, `plan`, `notes`).
+- בכניסה: אם המנוי לא פעיל → מסך חסום. אם פעיל וסניף אחד → דשבורד הסניף; אם כמה → **מסך רשת** עם רשימת סניפים.
+- בכל סניף במסך הרשת: `alerts: VenueAlert[]`. **כללי חריגה יוגדרו בהמשך** — כרגע המערך ריק וה-UI מציג placeholder.
 
-### 8.3 Home — 3 פאזות
-1. **לפני משמרת:** שעה + התקדמות צ'ק-ליסט פתיחה  
-2. **משמרת פעילה:** טיימר + שמות עובדים + התראות מלאי/משימות + יעד טיפים  
-3. **אחרי הזנת טיפים:** סיכום כספי (מזומן/אשראי/יעד)
+`VenueAlert` (חוזה יציב):
 
----
-
-## 9. יכולות ליבה (Baseline — קיים / חייב ב-P0)
-
-### 9.1 מחזור משמרת
-
-```mermaid
-stateDiagram-v2
-  [*] --> PreShift: פתיחת_אפליקציה
-  PreShift --> Active: StartShift_בחירת_צוות_יעד_צקליסט
-  Active --> TipsEntry: הזנת_טיפים
-  TipsEntry --> Active: עדכון
-  Active --> Summary: EndShift
-  Summary --> PreShift: סיום
+```
+{ id, venueId, topic, severity: "info" | "warning" | "critical", message, createdAt }
 ```
 
-**מודלים:** StartShiftModal · EndShiftSummaryModal · TipsEntryModal · AddShiftModal  
-**חלוקת טיפים:** לפי שעות או אחוזים; מזומן / אשראי נפרדים.
-
-### 9.2 צוות
-CRUD עובדים, תפקידים, חיפוש, פילטר במשמרת, היסטוריית טיפים לעובד.
-
-### 9.3 בר / מלאי בסיסי
-רשימת מלאי לפי קטגוריה, +/- כמות, סף מינימום (באדג'), מחיקות (write-off), Beverage Cost, סטופ-ליסט.
-
-### 9.4 צ'ק-ליסטים
-ברירות מחדל: פתיחה / סגירה / תדריך לפני משמרת.  
-מותאמים אישית + מצב Smart (פריט אחד בכל מסך).
-
-### 9.5 סטטיסטיקה והיסטוריה
-טיפים 7י/30י/חודש/הכל, דירוג עובדים, ייצוא CSV (Share sheet במובייל).
-
-### 9.6 תדריך ולוח זמנים
-Briefing: צוות, משימות פתוחות, סטופ-ליסט.  
-Schedule: גריד שבועי (הרחבה להזמנות ב-P1).
-
-### 9.7 שפה וחשבון
-מחליף שפה he/ru/en, שם מקום, מטבע, התחברות אופציונלית (לוקאלי בלי חשבון עדיין אפשרי ב-P0; ב-P1 מומלץ לחייב UP).
-
-### 9.8 באגים ידועים לתיקון ב-P0
-- אין אפשרות לתקן טיפים שהוזנו לתאריך שגוי → **חובה:** עריכת DayEntry.
-- StartShiftModal: בלי גלילה כשיש הרבה עובדים → **חובה:** ScrollView.
-- מקלדת מכסה שדות הזנה → **חובה:** KeyboardAware בכל טפסים רלוונטיים.
+`topic` יישאר מחרוזת חופשית עד שיוגדרו נושאים.
 
 ---
 
-## 10. יכולות מורחבות (מה-Roadmap) — פירוט מלא
+## 3. דשבורד סניף (בעלים)
 
-מקור: [`improvments.md`](improvments.md). כל סעיף הוא דרישה מוצרית באפליקציה.
+בית: שלום + שם, תאריך/שעה, שם סניף (חזרה לרשת), כרטיסים:
 
-### P1 — קריטי
+| כרטיס | תוכן |
+|-------|------|
+| עובדים | HR: תפקיד, הרשאות, שכר, ת.ז, 101, מסמכים |
+| מלאי | שני אזורים: בר / מטבח |
+| תפריט בר | עץ BOM |
+| תפריט מטבח | עץ BOM |
+| ספקים | כרטיס ספק + קישור למלאי חסר |
+| הגדרות | עסק + סניף פעיל |
 
-#### 10.1 הזמנת משמרות
-- עובדים לוקחים משמרות **באפליקציה**.
-- שני מצבים:
-  - **«אני יכול»** — כל המשמרות פתוחות; כמה אנשים יכולים על אותה משמרת.
-  - **«אני רוצה»** — מי ראשון — שלו המשמרת.
-- מגבלות חוק עבודה ישראלי: מקסימום משמרת אחת ביום, 6 ימים בשבוע.
-- Push אם משמרת נשארה פתוחה.
+### 3.1 עובדים
 
-```mermaid
-flowchart LR
-  UP_Create[UP_יוצר_סלוטים] --> Mode{מצב}
-  Mode -->|אני_יכול| Multi[מספר_עובדים_לסלוט]
-  Mode -->|אני_רוצה| FCFS[First_Come_First_Served]
-  Multi --> Limits[בדיקת_מגבלות_חוק]
-  FCFS --> Limits
-  Limits -->|עבר| Claim[שיבוץ]
-  Limits -->|חריגה| Reject[דחייה_עם_הסבר]
-  Claim --> PushOpen[Push_אם_נשאר_פתוח]
-```
+- תפקידים בסיס: `bartender` · `waiter` · `cook` (+ תווית מותאמת)
+- שכר: `hourly` | `monthly` | `topup` + סכום
+- הרשאות (flags): `view_stock`, `edit_stock`, `manage_staff`, `manage_recipes`, `manage_suppliers`, `run_shift`, `view_reports`
+- מסמכים: `id` | `form101` | `other`
 
-#### 10.2 אונבורדינג עובד
-קישור WhatsApp/Email + קוד → הורדה מחנות → קוד → פרופיל → דאשבורד עובד.
+### 3.2 מלאי
 
-#### 10.3 ממשק עובד
-מצב/ניווט נפרד; לא תצוגת מנהל.
+פריט: שם, `department` bar|kitchen, קטגוריה, כמות, יחידה, minQuantity. מתחת לסף — סימון במסך המלאי בלבד.
 
-#### 10.4 שחזור גישה
-UP: אימייל + שאלת אבטחה. עובד: דרך UP. Flow מלא מקצה לקצה.
+### 3.3 מתכונים
 
-#### 10.5 מנוי שפג
-כמפורט בסעיף 7.3 + אזהרה תחת טופס התחברות.
+`recipes` + `recipe_lines`: רכיב = `inventoryItemId` או `subRecipeId` + כמות + יחידה. בלי פיצוץ מלאי אוטומטי.
 
-#### 10.6 סטופ-ליסט מפורט
-עובד מדווח אזילה → Push ל-UP → הוספה מיידית לסטופ-ליסט → חי עד סוף המשמרת / עד הסרה ידנית.
+### 3.4 ספקים
 
-#### 10.7 חיפוש גלובלי
-חיפוש בסגנון Apple: עובדים, פריטי מחסן, היסטוריה.
-
-#### 10.8 Happy Hour / מבצעים
-במדור תפריט/בר: שעות מבצע והנחות.
-
-#### 10.9 אנליטיקה ביוזמת UP
-נתונים בענן; «איסוף» סטטיסטיקה בלחיצת כפתור; שליחת מלאי באימייל/WhatsApp (Share מהאפליקציה).
-
-#### 10.10 Enterprise UI — ריבוי מקומות
-שם הבר בכותרת → רשימת מקומות → מעבר ביניהם (כרטיס Legendary / Multibar).
-
-#### 10.11 עובד החודש
-אלגוריתם: הכי פעיל + בלי איחורים + הכי הרבה טיפים בשבוע.
-
-### P2 — מחסן מתקדם
-
-#### 10.12 מלאי מתקדם
-- תת-קטגוריות: Display / Speed Bar / מחסן + מותאמות.
-- אייקוני בקבוקים לפי צורה.
-- ייבוא מ-Excel.
-- יצירת פריטים ב-AI (בתוך האפליקציה).
-
-#### 10.13 אינוונטריזציה
-- כפתור «התחל מלאי».
-- סליידר רמת נוזל בצורת צללית בקבוק (כמו בהירות פנס באייפון).
-- מלאי באצ'ים.
-- שליחת Excel באימייל/WhatsApp.
-- זיהוי מדף בתמונה (AI) — אופציונלי.
-
-### P3 — לעתיד
-
-#### 10.14 תפריט וכרטיסי טכנולוגיה
-תפריט אלכוהול (מנות+בקבוקים), קוקטיילים ידני/AI, Beverage Cost, באצ'ים עם הוצאת מרכיבים מחישוב נפח, עיצוב תפריט ב-AI.
-
-#### 10.15 מאגר צ'ק-ליסטים
-מאגר ציבורי — הוספה בלחיצה אחת לאפליקציה.
-
-#### 10.16 מחירים ב-Feature Cards
-הגדרת תמחור כרטיסים בסוף; תזכורת כשמגיעים.
-
-#### 10.17 KosherBar / כשרות
-AI + מאגר כשרות מתעדכן חודשי; מוצר/כרטיס נפרד.
-
-#### 10.18 סדנאות
-כרטיס לארגון הדרכות ושליחת חומרי לימוד לעובדים (באפליקציה / שיתוף).
-
-#### 10.19 החלפת מתכוני קוקטיילים בין מקומות
-
-#### 10.20 גיבוי באובדן טלפון
-שחזור מלא מחשבון ענן אחרי התקנה מחדש מהחנות.
-
-#### 10.21 משפטי
-מדיניות החזרות, הסכם משתמש, PDPA (חוק הגנת הפרטיות) — מסכים/קישורים **בתוך האפליקציה** + דפי מדיניות לחנויות (Apple/Google דורשים URL ציבורי למדיניות פרטיות — זה הדף הווב היחיד הנדרש רגולטורית, לא האפליקציה עצמה).
+שם, טלפון, whatSupplies, scheduleNote, notes; שיוך לפריטי מלאי אופציונלי.
 
 ---
 
-## 11. Feature Cards (מונטיזציה משחקית)
+## 4. API (שלב 1)
 
-| id | שם (כוונה) | Rarity | Premium | שלב |
-|----|------------|--------|---------|-----|
-| shift-reminders | תזכורות משמרת | common | לא | P1 |
-| custom-checklists | צ'ק-ליסטים מותאמים | common | לא | P0/P1 |
-| shift-goals | יעדי משמרת | common | לא | P0 |
-| team-roles | תפקידי צוות | rare | כן | P0 |
-| export-reports | ייצוא דוחות | rare | כן | P1 |
-| weekly-analytics | אנליטיקה | rare | כן | P0 |
-| tips-forecast | תחזית טיפים | epic | כן | P3 |
-| smart-stock | מחסן חכם | epic | כן | P2 |
-| bonus-system | בונוסים | epic | כן | P1/P11 |
-| multibar | מולטיבר | legendary | כן | P1 |
+בסיס: `/api`
 
-כרטיסים נעולים ויזואלית עד מנוי/רכישה; `implemented` חייב להיות אמת רק כשהפיצ'ר באמת עובד באפליקציה.
+בעלים (דורש מנוי פעיל חוץ מ-login/me/logout):
 
----
+- `POST /auth/owner/register` — **סגור** (403 `NO_PUBLIC_SIGNUP`)
+- `POST /auth/owner/login` — session גם אם המנוי לא פעיל (`subscription.isActive`)
+- `GET /auth/me` — כולל owner, organization, venues[], venue, subscription
+- `POST /auth/select-venue` — 402 אם המנוי לא פעיל
+- `POST /owner/venues` · `PATCH /owner/venues/:id` — `requirePaidOrg`
+- `PATCH /owner/organization`
+- CRUD `/owner/staff` + documents
+- CRUD `/owner/inventory`
+- CRUD `/owner/recipes`
+- CRUD `/owner/suppliers`
 
-## 12. API (חוזה שרת)
+פלטפורמה (`requirePlatformAdmin`):
 
-בסיס קיים + הרחבות לפי שלבים:
+- `POST /auth/admin/login`
+- `GET /admin/customers` · `POST /admin/customers`
+- `GET /admin/customers/:orgId`
+- `PATCH /admin/customers/:orgId/subscription` — הארכה / השהיה / הפעלה מחדש
 
-| אזור | נתיבים עיקריים |
-|------|----------------|
-| Auth | `POST /auth/register`, `/login`, `/logout`, `GET /auth/me`, שחזור |
-| Venue | `PATCH /venue`, רשימת venues (multibar) |
-| Employees | CRUD + invite codes |
-| Day entries | CRUD טיפים/ימים |
-| Shift slots | CRUD + claims (P1) |
-| Stock / stop / writeoffs | CRUD + sync (P1–P2) |
-| Checklists | CRUD + templates library (P3) |
-| Subscription | status, verify IAP receipt |
-| Analytics | generate-on-demand (P1) |
-| Push | רישום device token |
-
-כל הקלט/פלט מאומת ב-Zod. OpenAPI → Orval → hooks באפליקציה.
+JWT: `owner` (שדות `sid`, `ownerId`, `organizationId`, `venueId`) או `platform_admin` (`sid`, `platformAdminId`).
 
 ---
 
-## 13. עיצוב ו-UX (מובייל)
+## 5. שלבים הבאים (לא עכשיו)
 
-| כלל | פירוט |
-|-----|--------|
-| Dark always | רקע `#111827`, טקסט בהיר, אקסנט `#F59E0B` |
-| גופן | Inter (לא מערכתי ברירת מחדל) |
-| ניווט | Tab bar: Home · Team · Quick(מרכז) · Bar · More |
-| פעולות | Bottom sheets / modals לפעולות תפעול |
-| Haptics | בכל פעולה משמעותית |
-| RTL | כש-`he` — כיוון מלא |
-| נגישות | אזורי לחיצה גדולים, ניגודיות מספקת |
-| מקלדת | לעולם לא מכסה שדה פעיל |
-
-**אייקון:** זהב "B" עם שייקרים — מאושר ב-`app.json`.
+- דשבורד מנהל משמרת (כולל טיפים/נוכחות שכבר קיימים בקוד)
+- דשבורד עובד
+- כללי חריגה לכל נושא
+- Postgres, POS
+- סליקה אוטומטית (Stripe / Cardcom) — בלי לשנות את שער `requirePaidOrg`
 
 ---
 
-## 14. דרישות לא-פונקציונליות (NFR)
+## 6. עיצוב
 
-| נושא | יעד |
-|------|-----|
-| קור סטארט | מסך ראשון שימושי &lt; 2s במכשיר בינוני |
-| Offline | פתיחת/סגירת משמרת + טיפים בלי רשת |
-| אבטחה | PIN לא נשמר ב-plaintext; HTTPS; tokens קצובים |
-| פרטיות | PDPA; מחיקת נתונים אחרי 3 חודשי מנוי מת; ייצוא/מחיקה לפי בקשה |
-| גיבוי | שחזור מלא אחרי התקנה מחדש (P3 / מוקדם יותר לטיפים) |
-| חנויות | EAS profiles ל-iOS + Android; מדיניות פרטיות URL לחנויות |
-| יציבות | ErrorBoundary; אין מסכי stub בפרודקשן |
-
----
-
-## 15. Roadmap לביצוע
-
-```mermaid
-gantt
-  title Boniface_Roadmap
-  dateFormat YYYY-MM
-  section P0_ליבה
-  תיקון_באגים_ועריכת_טיפים           :p0a, 2026-08, 2w
-  חיזוק_ליבה_ואחידות_i18n            :p0b, after p0a, 3w
-  EAS_iOS_Android_מוכן_לחנות         :p0c, after p0b, 2w
-  section P1_קריטי
-  Auth_שחזור_מנוי                    :p1a, after p0c, 3w
-  ממשק_עובד_ואונבורדינג              :p1b, after p1a, 4w
-  הזמנת_משמרות_וסטופ_מפורט           :p1c, after p1b, 4w
-  חיפוש_HappyHour_Enterprise_עובד_חודש :p1d, after p1c, 4w
-  section P2_מחסן
-  מלאי_מתקדם_ואינוונטריזציה          :p2a, after p1d, 6w
-  section P3_עתיד
-  תפריט_AI_כשרות_סדנאות_גיבוי_משפטי  :p3a, after p2a, 8w
-```
-
-**שער יציאה לחנויות (MVP מסחרי):** סיום P0 + Auth בסיסי + מדיניות פרטיות URL + בניית EAS ל-iOS ו-Android.  
-P1+ יוצאים בעדכוני חנות.
-
----
-
-## 16. קריטריוני קבלה (דוגמאות מחייבות)
-
-### P0
-- [ ] אפשר לפתוח משמרת, להזין טיפים, לסגור — לגמרי Offline.
-- [ ] אפשר לערוך DayEntry מתאריך שגוי.
-- [ ] StartShiftModal נגלל; מקלדת לא מכסה שדות.
-- [ ] he/ru/en + RTL בעברית בכל מסכי הליבה.
-- [ ] אין כפתור «מת» / stub במסכי ליבה.
-
-### P1
-- [ ] עובד מצטרף בקוד ומגיע לממשק עובד בלבד.
-- [ ] הזמנת משמרות בשני מצבים + אכיפת מגבלות חוק.
-- [ ] UP נחסם במנוי שפג; עובדים ב-grace חודש.
-- [ ] דיווח אזילה מעובד מגיע ל-UP ונסגר בסטופ-ליסט.
-
-### חנויות
-- [ ] Build EAS חתום ל-TestFlight / Play Internal.
-- [ ] מדיניות פרטיות + תנאי שימוש נגישים מהאפליקציה ומהחנות.
-- [ ] IAP / מנוי מאומת בשרת (לפני מונטיזציה חיה).
-
----
-
-## 17. מחוץ לסקופ מפורש
-
-- אפליקציית ווב / דשבורד בדפדפן לבעל העסק.
-- POS / סליקה של הזמנות לקוח קצה.
-- רשת חברתית בין בארים (מעבר לשיתוף מתכונים ב-P3).
-- מסחר Feature Cards בין משתמשים.
-
----
-
-## 18. מקורות אמת
-
-| מקור | תפקיד |
-|------|--------|
-| מסמך זה (`spec.md`) | אפיון מוצר מלא |
-| `rules.md` | חוקי בנייה למפתחים/סוכן |
-| `improvments.md` | רשימת שיפורים מקורית (עברית) |
-| `שינויים.md` | יומן שינויים חובה — תאריך, מה, למה, איפה בקוד, איפה באפליקציה |
-| הקוד הקיים בתיקייה | Baseline לייחוס — בבנייה מאפס מותר להחליף מבנה כל עוד ההתנהגות עומדת באפיון |
-
----
-
-*Boniface הוא מוצר מובייל. כל החלטה שמייצרת «גרסת דפדפן של האפליקציה» נוגדת את האפיון, אלא אם מדובר בדף מדיניות לחנויות או כלי פנימי לפיתוח.*
+רקע `#111827` · זהב `#F59E0B` · Inter · dark only · כרטיסים גדולים.

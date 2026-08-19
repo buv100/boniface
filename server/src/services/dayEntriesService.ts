@@ -4,9 +4,12 @@ import { newId, nowIso } from "../middleware/auth";
 function hoursBetween(start: string, end: string): number {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
-  let mins = eh * 60 + em - (sh * 60 + sm);
-  if (mins < 0) mins += 24 * 60;
-  return mins / 60;
+  const snap = (mins: number) => Math.round(mins / 15) * 15;
+  let s = snap((sh || 0) * 60 + (sm || 0));
+  let e = snap((eh || 0) * 60 + (em || 0));
+  if (e === s) return 0;
+  if (e < s) e += 24 * 60;
+  return (e - s) / 60;
 }
 
 export function calcShiftTips(

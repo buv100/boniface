@@ -19,6 +19,7 @@ import { EndShiftSummaryModal } from "@/components/EndShiftSummaryModal";
 import { ShiftCard } from "@/components/ShiftCard";
 import { StartShiftModal } from "@/components/StartShiftModal";
 import { TipsEntryModal } from "@/components/TipsEntryModal";
+import { ManageShiftStaffModal } from "@/components/ManageShiftStaffModal";
 import { VenuePickerModal } from "@/components/VenuePickerModal";
 import { HeaderIconButton } from "@/components/HeaderIconButton";
 import { HintBanner, PrimaryButton } from "@/components/ui/EasyUI";
@@ -35,6 +36,8 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useBoniface } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
+import { buildShiftEntriesFromAttendance } from "@/lib/shiftAttendance";
+import { nowTimeSnapped } from "@/lib/shiftTime";
 import { useColors } from "@/hooks/useColors";
 
 const STAFF_COLORS = ["#F59E0B", "#A78BFA", "#38BDF8", "#4ADE80", "#FB923C", "#F472B6"];
@@ -64,7 +67,9 @@ export default function DashboardScreen() {
   const [startShiftModal, setStartShiftModal] = useState(false);
   const [endShiftModal, setEndShiftModal] = useState(false);
   const [tipsModal, setTipsModal] = useState(false);
+  const [tipsRequired, setTipsRequired] = useState(false);
   const [venuePicker, setVenuePicker] = useState(false);
+  const [manageStaffModal, setManageStaffModal] = useState(false);
 
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -128,6 +133,38 @@ export default function DashboardScreen() {
   const totalChecklistItems = checklists.reduce((acc, cl) => acc + cl.items.length, 0);
   const checklistDoneCount = checklists.reduce((acc, cl) => acc + cl.items.filter((i) => i.done).length, 0);
   const firstUncompleted = checklists.flatMap((cl) => cl.items).find((i) => !i.done)?.text ?? null;
+
+  const syncTipsFromAttendance = async () => {
+    const attendance = shiftState.attendance ?? [];
+    if (!attendance.length) return draft;
+    const endNow = nowTimeSnapped();
+    const built = buildShiftEntriesFromAttendance(attendance, employees, endNow);
+    const updated: DayEntry = {
+      ...draft,
+      shifts: built.length ? built : draft.shifts,
+    };
+    if (built.length) {
+      setDraft(updated);
+      await saveDayEntry(updated);
+    }
+    return updated;
+  };
+
+  const handleConfirmEndShift = async () => {
+    await syncTipsFromAttendance();
+    await endShift();
+    setTipsRequired(true);
+    setTipsModal(true);
+  };
+
+  const openTipsEditor = () => {
+    if (shiftState.active && selectedDate === today) return;
+    setTipsRequired(false);
+    setTipsModal(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const canEditTips = !(shiftState.active && selectedDate === today);
 
   const getShiftDuration = (startTime: string) => {
     const [sh, sm] = startTime.split(":").map(Number);
@@ -248,8 +285,8 @@ export default function DashboardScreen() {
               style={{ marginTop: 14 }}
             />
           </View>
-        ) : totalTips === 0 ? (
-          /* PHASE 2: Shift active, no tips — team & ops */
+        ) : (
+          /* PHASE 2: Shift active — team & ops (tips only after end) */
           <LinearGradient
             colors={["#F59E0B", "#D97706", "#B45309"]}
             start={{ x: 0, y: 0 }}
@@ -298,51 +335,10 @@ export default function DashboardScreen() {
             <Text style={styles.heroHintOnGold}>{tr.home.hintActive}</Text>
 
             <TouchableOpacity
-              style={styles.heroSecondaryOnGold}
-              onPress={() => setTipsModal(true)}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel={tr.home.enterTips}
+              style={styles.heroEndBtn}
+              onPress={() => setEndShiftModal(true)}
+              activeOpacity={0.8}
             >
-              <Feather name="dollar-sign" size={16} color="#111827" />
-              <Text style={styles.heroSecondaryOnGoldText}>{tr.home.enterTips}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.heroEndBtn} onPress={() => setEndShiftModal(true)} activeOpacity={0.8}>
-              <Feather name="stop-circle" size={14} color="#F59E0B" />
-              <Text style={styles.heroEndBtnText}>{tr.home.endShift}</Text>
-            </TouchableOpacity>
-          </LinearGradient>
-        ) : (
-          /* PHASE 3: Shift active + tips entered — financial summary */
-          <LinearGradient
-            colors={["#F59E0B", "#D97706", "#B45309"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroCard}
-          >
-            <View style={styles.heroShine} />
-            <Text style={styles.heroEyebrow}>{tr.home.phaseTips}</Text>
-            <Text style={styles.heroAmount}>{`₪${totalTips.toLocaleString()}`}</Text>
-            <Text style={styles.heroShiftMeta}>
-              {tr.home.shiftActive} · {shiftState.startTime ? getShiftDuration(shiftState.startTime) : timeStr}
-            </Text>
-
-            <View style={styles.heroBreakdown}>
-              {[
-                [tr.home.cashLabel.toUpperCase(), draft.totalCash],
-                [tr.home.cardLabel.toUpperCase(), draft.totalCard],
-              ].map(([label, val], i) => (
-                <View key={i} style={styles.heroBreakdownItem}>
-                  <Text style={styles.heroBreakdownLabel}>{label as string}</Text>
-                  <Text style={styles.heroBreakdownVal}>₪{(val as number).toLocaleString()}</Text>
-                </View>
-              ))}
-            </View>
-
-            <Text style={styles.heroHintOnGold}>{tr.home.hintAfterTips}</Text>
-
-            <TouchableOpacity style={styles.heroEndBtn} onPress={() => setEndShiftModal(true)} activeOpacity={0.8}>
               <Feather name="stop-circle" size={14} color="#F59E0B" />
               <Text style={styles.heroEndBtnText}>{tr.home.endShift}</Text>
             </TouchableOpacity>
@@ -424,7 +420,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* ── Active Shift Staff List ── */}
-        {shiftState.active && shiftEmployees.length > 0 && (
+        {shiftState.active && (
           <View style={[styles.shiftNowCard, { backgroundColor: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.09)" }]}>
             <View style={styles.shiftNowHeader}>
               <Text style={[styles.shiftNowTitle, { color: colors.foreground }]}>{tr.home.shiftSection(shiftEmployees.length)}</Text>
@@ -437,15 +433,35 @@ export default function DashboardScreen() {
             {shiftEmployees.map((emp, i) => {
               const color = STAFF_COLORS[i % STAFF_COLORS.length];
               const initial = emp.name.charAt(0).toUpperCase();
+              const joined =
+                [...(shiftState.attendance ?? [])]
+                  .reverse()
+                  .find((a) => a.employeeId === emp.id && !a.leftAt)?.joinedAt ?? shiftState.startTime;
               return (
                 <View key={emp.id} style={styles.staffRow}>
                   <View style={[styles.staffAvatar, { backgroundColor: color + "25", borderColor: color + "45" }]}>
                     <Text style={[styles.staffInitial, { color }]}>{initial}</Text>
                   </View>
-                  <Text style={[styles.staffName, { color: colors.foreground }]} numberOfLines={1}>{emp.name}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.staffName, { color: colors.foreground }]} numberOfLines={1}>{emp.name}</Text>
+                    {joined ? (
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.4)", marginTop: 1 }}>
+                        {tr.manageShift.since(joined)}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
               );
             })}
+
+            <TouchableOpacity
+              style={[styles.manageStaffBtn, { borderColor: "rgba(245,158,11,0.35)", backgroundColor: "rgba(245,158,11,0.1)" }]}
+              onPress={() => setManageStaffModal(true)}
+              activeOpacity={0.8}
+            >
+              <Feather name="users" size={14} color="#F59E0B" />
+              <Text style={styles.manageStaffBtnText}>{tr.manageShift.manageBtn}</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.endShiftRow, { backgroundColor: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.08)" }]}
@@ -511,39 +527,64 @@ export default function DashboardScreen() {
             </Text>
           </View>
           <TouchableOpacity
-            style={[styles.tipsEnterBtn, { backgroundColor: colors.primary }]}
-            onPress={() => { setTipsModal(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+            style={[
+              styles.tipsEnterBtn,
+              {
+                backgroundColor: canEditTips ? colors.primary : colors.border,
+                opacity: canEditTips ? 1 : 0.45,
+              },
+            ]}
+            onPress={openTipsEditor}
+            disabled={!canEditTips}
+            accessibilityLabel={canEditTips ? tr.home.enterTips : tr.home.tipsAfterEnd}
           >
-            <Feather name="edit-3" size={18} color={colors.primaryForeground} />
+            <Feather
+              name={canEditTips ? "edit-3" : "lock"}
+              size={18}
+              color={canEditTips ? colors.primaryForeground : colors.mutedForeground}
+            />
           </TouchableOpacity>
         </View>
+        {shiftState.active && selectedDate === today && (
+          <Text style={[styles.tipsLockedHint, { color: colors.mutedForeground }]}>
+            {tr.home.tipsAfterEnd}
+          </Text>
+        )}
 
         {/* ── Shift Entry List ── */}
         <View style={styles.shiftHeader}>
           <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
             {tr.home.shiftSection(draft.shifts.length)}
           </Text>
-          <TouchableOpacity
-            style={[styles.addShiftBtn, { backgroundColor: colors.primary }]}
-            onPress={() => { setEditShift(undefined); setShiftModal(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-          >
-            <Feather name="plus" size={15} color={colors.primaryForeground} />
-            <Text style={[styles.addShiftBtnText, { color: colors.primaryForeground }]}>{tr.home.addBtn}</Text>
-          </TouchableOpacity>
+          {!shiftState.active && (
+            <TouchableOpacity
+              style={[styles.addShiftBtn, { backgroundColor: colors.primary }]}
+              onPress={() => { setEditShift(undefined); setShiftModal(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+            >
+              <Feather name="plus" size={15} color={colors.primaryForeground} />
+              <Text style={[styles.addShiftBtnText, { color: colors.primaryForeground }]}>{tr.home.addBtn}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {draft.shifts.length === 0 ? (
           <View style={[styles.emptyShifts, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Feather name="users" size={22} color={colors.mutedForeground} />
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{tr.home.noStaff}</Text>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+              {shiftState.active ? tr.home.tipsAfterEnd : tr.home.noStaff}
+            </Text>
           </View>
         ) : (
           results.map((r) => (
             <ShiftCard
               key={r.shift.id}
               result={r}
-              onEdit={() => { setEditShift(r.shift); setShiftModal(true); }}
-              onDelete={() => handleDeleteShift(r.shift.id)}
+              onEdit={
+                shiftState.active
+                  ? undefined
+                  : () => { setEditShift(r.shift); setShiftModal(true); }
+              }
+              onDelete={shiftState.active ? undefined : () => handleDeleteShift(r.shift.id)}
             />
           ))
         )}
@@ -571,16 +612,29 @@ export default function DashboardScreen() {
       <EndShiftSummaryModal
         visible={endShiftModal}
         onClose={() => setEndShiftModal(false)}
-        onConfirm={() => { endShift(); }}
+        onConfirm={() => { void handleConfirmEndShift(); }}
         shiftState={shiftState}
-        dayEntry={draft}
+        staffCount={
+          (shiftState.attendance ?? []).filter((a) => a.joinedAt).length ||
+          shiftState.employeeIds.length
+        }
       />
       <TipsEntryModal
         visible={tipsModal}
-        onClose={() => setTipsModal(false)}
-        date={selectedDate}
+        onClose={() => {
+          setTipsModal(false);
+          setTipsRequired(false);
+        }}
+        date={tipsRequired ? today : selectedDate}
+        required={tipsRequired}
+        onSaved={() => {
+          setTipsRequired(false);
+          setSelectedDate(today);
+          loadDate(today);
+        }}
       />
       <VenuePickerModal visible={venuePicker} onClose={() => setVenuePicker(false)} />
+      <ManageShiftStaffModal visible={manageStaffModal} onClose={() => setManageStaffModal(false)} />
     </View>
   );
 }
@@ -714,6 +768,17 @@ const styles = StyleSheet.create({
     paddingVertical: 9, borderRadius: 11, borderWidth: 1, marginTop: 4,
   },
   endShiftRowText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  manageStaffBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 4,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  manageStaffBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#F59E0B" },
 
   // Stop list banner
   stopListBanner: {
@@ -737,7 +802,8 @@ const styles = StyleSheet.create({
   dateBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8, paddingVertical: 6 },
   dateText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   todayDot: { width: 5, height: 5, borderRadius: 2.5 },
-  tipsRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
+  tipsRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
+  tipsLockedHint: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 16 },
   tipsCard: { flex: 1, borderRadius: 12, borderWidth: 1, padding: 12, gap: 4 },
   tipsLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
   tipsAmount: { fontSize: 16, fontFamily: "Inter_700Bold" },

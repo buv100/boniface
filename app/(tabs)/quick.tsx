@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,7 +21,8 @@ import { todayString, useApp, generateId, DayEntry } from "@/context/AppContext"
 import { useBoniface } from "@/context/BonifaceContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
-
+import { buildShiftEntriesFromAttendance } from "@/lib/shiftAttendance";
+import { nowTimeSnapped } from "@/lib/shiftTime";
 const ACTION_META = [
   { id: "writeoff" as const, icon: "clipboard" as const, color: "#FB923C", bg: "rgba(124,45,18,0.38)" },
   { id: "stoplist" as const, icon: "slash" as const, color: "#F87171", bg: "rgba(127,29,29,0.38)" },
@@ -35,8 +37,9 @@ export default function QuickActionsScreen() {
   const insets = useSafeAreaInsets();
   const { tr, isRTL } = useLang();
   const { shiftState, endShift, lowStockCount, writeOffs, stopList } = useBoniface();
-  const { dayEntries } = useApp();
+  const { dayEntries, saveDayEntry, employees } = useApp();
   const [tipsModal, setTipsModal] = useState(false);
+  const [tipsRequired, setTipsRequired] = useState(false);
   const [startShiftModal, setStartShiftModal] = useState(false);
   const [endShiftModal, setEndShiftModal] = useState(false);
 
@@ -48,6 +51,19 @@ export default function QuickActionsScreen() {
     dayEntries.find((e) => e.date === today) ??
     { id: generateId(), date: today, totalCash: 0, totalCard: 0, shifts: [] };
 
+  const handleConfirmEndShift = async () => {
+    const attendance = shiftState.attendance ?? [];
+    if (attendance.length) {
+      const built = buildShiftEntriesFromAttendance(attendance, employees, nowTimeSnapped());
+      if (built.length) {
+        await saveDayEntry({ ...todayEntry, shifts: built });
+      }
+    }
+    await endShift();
+    setTipsRequired(true);
+    setTipsModal(true);
+  };
+
   const handleAction = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     switch (id) {
@@ -55,7 +71,14 @@ export default function QuickActionsScreen() {
       case "stoplist":  router.navigate("/bar"); break;
       case "checklist": router.navigate("/more"); break;
       case "briefing":  router.navigate("/briefing"); break;
-      case "tips":      setTipsModal(true); break;
+      case "tips":
+        if (shiftState.active) {
+          Alert.alert(tr.home.enterTips, tr.home.tipsAfterEnd);
+          break;
+        }
+        setTipsRequired(false);
+        setTipsModal(true);
+        break;
       case "schedule":  router.navigate("/schedule"); break;
     }
   };
@@ -194,7 +217,16 @@ export default function QuickActionsScreen() {
         </View>
       </ScrollView>
 
-      <TipsEntryModal visible={tipsModal} onClose={() => setTipsModal(false)} />
+      <TipsEntryModal
+        visible={tipsModal}
+        onClose={() => {
+          setTipsModal(false);
+          setTipsRequired(false);
+        }}
+        date={today}
+        required={tipsRequired}
+        onSaved={() => setTipsRequired(false)}
+      />
       <StartShiftModal
         visible={startShiftModal}
         onClose={() => setStartShiftModal(false)}
@@ -203,9 +235,12 @@ export default function QuickActionsScreen() {
       <EndShiftSummaryModal
         visible={endShiftModal}
         onClose={() => setEndShiftModal(false)}
-        onConfirm={() => { endShift(); }}
+        onConfirm={() => { void handleConfirmEndShift(); }}
         shiftState={shiftState}
-        dayEntry={todayEntry}
+        staffCount={
+          (shiftState.attendance ?? []).filter((a) => a.joinedAt).length ||
+          shiftState.employeeIds.length
+        }
       />
     </View>
   );

@@ -7,8 +7,9 @@ import React, {
 } from "react";
 
 import { apiCall, clearToken, getStoredToken, storeToken } from "@/lib/api";
+import type { AuthOrganization, AuthOwner, OwnerVenue } from "@/lib/ownerTypes";
 
-export type AuthRole = "manager" | "employee";
+export type AuthRole = "manager" | "employee" | "owner" | "platform_admin";
 
 export interface AuthManager {
   id: string;
@@ -31,13 +32,16 @@ export interface AuthEmployee {
 export interface AuthVenue {
   id: string;
   name: string;
+  organizationId?: string | null;
+  kind?: string;
+  address?: string | null;
   currency: string;
   timezone: string;
   createdAt: string;
   updatedAt?: string;
+  alerts?: OwnerVenue["alerts"];
 }
 
-/** List shape for multi-venue UI (stub works with one venue today). */
 export type AuthVenueList = AuthVenue[];
 
 export interface ForgotCheckResult {
@@ -46,11 +50,19 @@ export interface ForgotCheckResult {
 }
 
 export interface SubscriptionInfo {
-  id?: string;
+  id?: string | null;
   status: string;
   plan: string | null;
   expiresAt: string | null;
+  notes?: string | null;
   isActive: boolean;
+}
+
+export interface AuthPlatformAdmin {
+  id: string;
+  name: string;
+  phone: string;
+  createdAt: string;
 }
 
 interface AuthState {
@@ -58,8 +70,10 @@ interface AuthState {
   role: AuthRole | null;
   manager: AuthManager | null;
   employee: AuthEmployee | null;
+  owner: AuthOwner | null;
+  organization: AuthOrganization | null;
+  platformAdmin: AuthPlatformAdmin | null;
   venue: AuthVenue | null;
-  /** All venues accessible; currently always [venue] or []. */
   venues: AuthVenueList;
   subscription: SubscriptionInfo | null;
 }
@@ -73,11 +87,30 @@ interface RegisterOptions {
   securityAnswer?: string;
 }
 
+interface OwnerSessionPayload {
+  token: string;
+  role: "owner";
+  owner: AuthOwner;
+  organization: AuthOrganization;
+  venue: AuthVenue;
+  venues: AuthVenue[];
+  subscription?: SubscriptionInfo | null;
+}
+
+interface AdminSessionPayload {
+  token: string;
+  role: "platform_admin";
+  admin: AuthPlatformAdmin;
+}
+
 interface AuthContextType {
   token: string | null;
   role: AuthRole | null;
   manager: AuthManager | null;
   employee: AuthEmployee | null;
+  owner: AuthOwner | null;
+  organization: AuthOrganization | null;
+  platformAdmin: AuthPlatformAdmin | null;
   venue: AuthVenue | null;
   venues: AuthVenueList;
   subscription: SubscriptionInfo | null;
@@ -85,7 +118,9 @@ interface AuthContextType {
   isLoggedIn: boolean;
   isManager: boolean;
   isEmployee: boolean;
-  /** Managers blocked when subscription expired; employees keep grace access */
+  isOwner: boolean;
+  isPlatformAdmin: boolean;
+  ownerAccessActive: boolean;
   subscriptionExpired: boolean;
   canManageCritical: boolean;
   register: (
@@ -96,14 +131,20 @@ interface AuthContextType {
     opts?: RegisterOptions
   ) => Promise<void>;
   login: (phone: string, pin: string) => Promise<void>;
+  ownerLogin: (phone: string, pin: string) => Promise<void>;
+  adminLogin: (phone: string, pin: string) => Promise<void>;
   employeeLogin: (phone: string, pin: string) => Promise<void>;
   employeeJoin: (code: string, name: string, pin: string, phone?: string) => Promise<void>;
   logout: () => Promise<void>;
   forgotCheck: (phone: string) => Promise<ForgotCheckResult>;
   recover: (phone: string, securityAnswer: string, newPin: string) => Promise<void>;
   updateVenueLocally: (venue: Partial<AuthVenue>) => void;
-  /** Switch active venue (no-op when only one; prepared for multi-venue). */
-  switchVenue: (venueId: string) => void;
+  switchVenue: (venueId: string) => Promise<void>;
+  createVenue: (body: {
+    name: string;
+    kind: "bar" | "restaurant";
+    address?: string;
+  }) => Promise<AuthVenue>;
   refreshSubscription: () => Promise<SubscriptionInfo | null>;
   createInvite: (employeeName?: string) => Promise<{ code: string; expiresAt: string | null }>;
 }
@@ -118,17 +159,54 @@ async function fetchSubscription(token: string): Promise<SubscriptionInfo | null
   }
 }
 
+const emptyState: AuthState = {
+  token: null,
+  role: null,
+  manager: null,
+  employee: null,
+  owner: null,
+  organization: null,
+  platformAdmin: null,
+  venue: null,
+  venues: [],
+  subscription: null,
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    token: null,
-    role: null,
-    manager: null,
-    employee: null,
-    venue: null,
-    venues: [],
-    subscription: null,
-  });
+  const [state, setState] = useState<AuthState>(emptyState);
   const [isLoading, setIsLoading] = useState(true);
+
+  const applyOwnerSession = useCallback(async (payload: OwnerSessionPayload) => {
+    await storeToken(payload.token);
+    setState({
+      token: payload.token,
+      role: "owner",
+      manager: null,
+      employee: null,
+      owner: payload.owner,
+      organization: payload.organization,
+      platformAdmin: null,
+      venue: payload.venue,
+      venues: payload.venues?.length ? payload.venues : venuesFrom(payload.venue),
+      subscription: payload.subscription ?? null,
+    });
+  }, []);
+
+  const applyAdminSession = useCallback(async (payload: AdminSessionPayload) => {
+    await storeToken(payload.token);
+    setState({
+      token: payload.token,
+      role: "platform_admin",
+      manager: null,
+      employee: null,
+      owner: null,
+      organization: null,
+      platformAdmin: payload.admin,
+      venue: null,
+      venues: [],
+      subscription: null,
+    });
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -139,24 +217,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: AuthRole;
             manager?: AuthManager;
             employee?: AuthEmployee;
-            venue: AuthVenue;
+            owner?: AuthOwner;
+            organization?: AuthOrganization;
+            admin?: AuthPlatformAdmin;
+            venue?: AuthVenue;
             venues?: AuthVenue[];
+            subscription?: SubscriptionInfo | null;
           }>("/auth/me", { token });
-          const subscription = await fetchSubscription(token);
-          const venues =
-            data.venues && data.venues.length > 0 ? data.venues : venuesFrom(data.venue);
-          setState({
-            token,
-            role: data.role,
-            manager: data.manager ?? null,
-            employee: data.employee ?? null,
-            venue: data.venue,
-            venues,
-            subscription,
-          });
+          if (data.role === "platform_admin" && data.admin) {
+            setState({
+              token,
+              role: "platform_admin",
+              manager: null,
+              employee: null,
+              owner: null,
+              organization: null,
+              platformAdmin: data.admin,
+              venue: null,
+              venues: [],
+              subscription: null,
+            });
+          } else if (data.role === "owner" && data.owner && data.organization && data.venue) {
+            setState({
+              token,
+              role: "owner",
+              manager: null,
+              employee: null,
+              owner: data.owner,
+              organization: data.organization,
+              platformAdmin: null,
+              venue: data.venue,
+              venues: data.venues?.length ? data.venues : venuesFrom(data.venue),
+              subscription: data.subscription ?? null,
+            });
+          } else {
+            const subscription = await fetchSubscription(token);
+            const venues =
+              data.venues && data.venues.length > 0 ? data.venues : venuesFrom(data.venue);
+            setState({
+              token,
+              role: data.role,
+              manager: data.manager ?? null,
+              employee: data.employee ?? null,
+              owner: null,
+              organization: null,
+              platformAdmin: null,
+              venue: data.venue ?? null,
+              venues,
+              subscription,
+            });
+          }
         }
       } catch {
-        // Offline / API down: keep working without cloud session
         await clearToken();
       } finally {
         setIsLoading(false);
@@ -174,22 +286,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       venues?: AuthVenue[];
     }) => {
       await storeToken(payload.token);
-      const subscription = await fetchSubscription(payload.token);
+      const subscription = payload.role === "owner" ? null : await fetchSubscription(payload.token);
       const venues =
         payload.venues && payload.venues.length > 0
           ? payload.venues
           : venuesFrom(payload.venue);
-      setState({
+      setState((s) => ({
         token: payload.token,
         role: payload.role,
         manager: payload.manager ?? null,
         employee: payload.employee ?? null,
+        owner: s.owner,
+        organization: s.organization,
+        platformAdmin: s.platformAdmin,
         venue: payload.venue,
         venues,
         subscription,
-      });
+      }));
     },
     []
+  );
+
+  const adminLogin = useCallback(
+    async (phone: string, pin: string) => {
+      const data = await apiCall<AdminSessionPayload>("/auth/admin/login", {
+        method: "POST",
+        body: { phone, pin },
+      });
+      await applyAdminSession(data);
+    },
+    [applyAdminSession]
+  );
+
+  const ownerLogin = useCallback(
+    async (phone: string, pin: string) => {
+      const data = await apiCall<OwnerSessionPayload>("/auth/owner/login", {
+        method: "POST",
+        body: { phone, pin },
+      });
+      await applyOwnerSession(data);
+    },
+    [applyOwnerSession]
   );
 
   const register = useCallback(
@@ -290,15 +427,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await apiCall("/auth/logout", { method: "POST", token: state.token }).catch(() => {});
     }
     await clearToken();
-    setState({
-      token: null,
-      role: null,
-      manager: null,
-      employee: null,
-      venue: null,
-      venues: [],
-      subscription: null,
-    });
+    setState(emptyState);
   }, [state.token]);
 
   const forgotCheck = useCallback(async (phone: string) => {
@@ -336,20 +465,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const switchVenue = useCallback((venueId: string) => {
-    setState((s) => {
-      const next = s.venues.find((v) => v.id === venueId);
-      if (!next || next.id === s.venue?.id) return s;
-      return { ...s, venue: next };
-    });
-  }, []);
+  const switchVenue = useCallback(
+    async (venueId: string) => {
+      if (!state.token || state.role !== "owner") {
+        setState((s) => {
+          const next = s.venues.find((v) => v.id === venueId);
+          if (!next || next.id === s.venue?.id) return s;
+          return { ...s, venue: next };
+        });
+        return;
+      }
+      const data = await apiCall<OwnerSessionPayload>("/auth/select-venue", {
+        method: "POST",
+        token: state.token,
+        body: { venueId },
+      });
+      await applyOwnerSession(data);
+    },
+    [applyOwnerSession, state.role, state.token]
+  );
+
+  const createVenue = useCallback(
+    async (body: { name: string; kind: "bar" | "restaurant"; address?: string }) => {
+      if (!state.token) throw new Error("Not logged in");
+      const venue = await apiCall<AuthVenue>("/owner/venues", {
+        method: "POST",
+        token: state.token,
+        body,
+      });
+      setState((s) => ({ ...s, venues: [...s.venues, venue] }));
+      return venue;
+    },
+    [state.token]
+  );
 
   const refreshSubscription = useCallback(async () => {
     if (!state.token) return null;
+    if (state.role === "owner") {
+      const data = await apiCall<{ subscription?: SubscriptionInfo | null }>("/auth/me", {
+        token: state.token,
+      });
+      const subscription = data.subscription ?? null;
+      setState((s) => ({ ...s, subscription }));
+      return subscription;
+    }
+    if (state.role === "platform_admin") return null;
     const subscription = await fetchSubscription(state.token);
     setState((s) => ({ ...s, subscription }));
     return subscription;
-  }, [state.token]);
+  }, [state.token, state.role]);
 
   const createInvite = useCallback(
     async (employeeName?: string) => {
@@ -363,14 +527,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [state.token]
   );
 
-  const subscriptionExpired =
-    !!state.subscription &&
-    (state.subscription.status === "expired" || state.subscription.isActive === false);
-
   const isManager = state.role === "manager";
   const isEmployee = state.role === "employee";
-  // Employees get grace; managers cannot run critical cloud actions when expired
-  const canManageCritical = isManager && !subscriptionExpired;
+  const isOwner = state.role === "owner";
+  const isPlatformAdmin = state.role === "platform_admin";
+  const ownerAccessActive = isOwner && !!state.subscription?.isActive;
+  const subscriptionExpired = isOwner
+    ? !state.subscription?.isActive
+    : !!state.subscription &&
+      (state.subscription.status === "expired" || state.subscription.isActive === false);
+  const canManageCritical = (isManager || isOwner) && !subscriptionExpired;
 
   return (
     <AuthContext.Provider
@@ -379,6 +545,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: state.role,
         manager: state.manager,
         employee: state.employee,
+        owner: state.owner,
+        organization: state.organization,
+        platformAdmin: state.platformAdmin,
         venue: state.venue,
         venues: state.venues,
         subscription: state.subscription,
@@ -386,10 +555,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoggedIn: !!state.token,
         isManager,
         isEmployee,
+        isOwner,
+        isPlatformAdmin,
+        ownerAccessActive,
         subscriptionExpired,
         canManageCritical,
         register,
         login,
+        ownerLogin,
+        adminLogin,
         employeeLogin,
         employeeJoin,
         logout,
@@ -397,6 +571,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         recover,
         updateVenueLocally,
         switchVenue,
+        createVenue,
         refreshSubscription,
         createInvite,
       }}

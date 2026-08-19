@@ -9,6 +9,7 @@ import React, {
 } from "react";
 
 import { inventoryService } from "@/lib/services/inventoryService";
+import { nowTimeSnapped, snapTimeToQuarter, timeToMinutes } from "@/lib/shiftTime";
 import { generateId, todayString } from "./AppContext";
 import { useAuth } from "./AuthContext";
 
@@ -149,11 +150,19 @@ const DEFAULT_CHECKLISTS: Checklist[] = [
   },
 ];
 
+export interface ShiftAttendance {
+  employeeId: string;
+  joinedAt: string;
+  leftAt?: string | null;
+}
+
 export interface ShiftState {
   active: boolean;
   startTime: string | null;
   startDate: string | null;
   employeeIds: string[];
+  /** Join/leave segments — tip hours come from this (15-min snaps). */
+  attendance: ShiftAttendance[];
   tipsGoal?: number;
 }
 
@@ -173,6 +182,8 @@ interface BonifaceContextType {
   setPremium: (val: boolean) => Promise<void>;
   startShift: (employeeIds: string[], tipsGoal?: number) => Promise<void>;
   endShift: () => Promise<void>;
+  addEmployeesToShift: (employeeIds: string[]) => Promise<void>;
+  removeEmployeeFromShift: (employeeId: string) => Promise<void>;
   addChecklist: (title: string) => Promise<void>;
   deleteChecklist: (id: string) => Promise<void>;
   addChecklistItem: (checklistId: string, text: string) => Promise<void>;
@@ -195,9 +206,34 @@ interface BonifaceContextType {
 
 const BonifaceContext = createContext<BonifaceContextType | null>(null);
 
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(":").map(Number);
-  return (h || 0) * 60 + (m || 0);
+function normalizeShiftState(raw: Partial<ShiftState> | null | undefined): ShiftState {
+  const empty: ShiftState = {
+    active: false,
+    startTime: null,
+    startDate: null,
+    employeeIds: [],
+    attendance: [],
+  };
+  if (!raw) return empty;
+  const employeeIds = Array.isArray(raw.employeeIds) ? raw.employeeIds : [];
+  let attendance: ShiftAttendance[] = Array.isArray(raw.attendance) ? raw.attendance : [];
+  // Migrate older saves that only had employeeIds
+  if (raw.active && attendance.length === 0 && employeeIds.length > 0) {
+    const joined = snapTimeToQuarter(raw.startTime || nowTimeSnapped());
+    attendance = employeeIds.map((employeeId) => ({
+      employeeId,
+      joinedAt: joined,
+      leftAt: null,
+    }));
+  }
+  return {
+    active: !!raw.active,
+    startTime: raw.startTime ?? null,
+    startDate: raw.startDate ?? null,
+    employeeIds,
+    attendance,
+    tipsGoal: raw.tipsGoal,
+  };
 }
 
 /** True if now is within start–end (supports overnight ranges). */
@@ -267,6 +303,7 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
     startTime: null,
     startDate: null,
     employeeIds: [],
+    attendance: [],
   });
   const [stopList, setStopList] = useState<StopListItem[]>([]);
   const [writeOffs, setWriteOffs] = useState<WriteOff[]>([]);
@@ -310,11 +347,7 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(HAPPY_HOURS_KEY),
         ]);
         setStockItems(stockData ? JSON.parse(stockData) : DEFAULT_STOCK);
-        setShiftState(
-          shiftData
-            ? JSON.parse(shiftData)
-            : { active: false, startTime: null, startDate: null, employeeIds: [] }
-        );
+        setShiftState(normalizeShiftState(shiftData ? JSON.parse(shiftData) : null));
         setChecklists(checklistData ? JSON.parse(checklistData) : DEFAULT_CHECKLISTS);
         setIsPremium(premiumData === "true");
         setStopList(stopData ? JSON.parse(stopData) : []);
@@ -450,19 +483,61 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(PREMIUM_KEY, val ? "true" : "false");
   }, []);
 
-  const startShift = useCallback(async (employeeIds: string[], tipsGoal?: number) => {
-    const now = new Date();
-    const h = String(now.getHours()).padStart(2, "0");
-    const m = String(now.getMinutes()).padStart(2, "0");
-    const state: ShiftState = {
-      active: true,
-      startTime: `${h}:${m}`,
-      startDate: todayString(),
-      employeeIds,
-      tipsGoal,
-    };
+  const persistShift = useCallback(async (state: ShiftState) => {
     setShiftState(state);
     await AsyncStorage.setItem(SHIFT_KEY, JSON.stringify(state));
+  }, []);
+
+  const startShift = useCallback(async (employeeIds: string[], tipsGoal?: number) => {
+    const startTime = nowTimeSnapped();
+    const state: ShiftState = {
+      active: true,
+      startTime,
+      startDate: todayString(),
+      employeeIds: [...employeeIds],
+      attendance: employeeIds.map((employeeId) => ({
+        employeeId,
+        joinedAt: startTime,
+        leftAt: null,
+      })),
+      tipsGoal,
+    };
+    await persistShift(state);
+  }, [persistShift]);
+
+  const addEmployeesToShift = useCallback(async (ids: string[]) => {
+    setShiftState((prev) => {
+      if (!prev.active) return prev;
+      const joinedAt = nowTimeSnapped();
+      const nextIds = [...prev.employeeIds];
+      const nextAttendance = [...(prev.attendance ?? [])];
+      for (const id of ids) {
+        if (nextIds.includes(id)) continue;
+        nextIds.push(id);
+        nextAttendance.push({ employeeId: id, joinedAt, leftAt: null });
+      }
+      const state: ShiftState = { ...prev, employeeIds: nextIds, attendance: nextAttendance };
+      void AsyncStorage.setItem(SHIFT_KEY, JSON.stringify(state));
+      return state;
+    });
+  }, []);
+
+  const removeEmployeeFromShift = useCallback(async (employeeId: string) => {
+    setShiftState((prev) => {
+      if (!prev.active) return prev;
+      const leftAt = nowTimeSnapped();
+      const state: ShiftState = {
+        ...prev,
+        employeeIds: prev.employeeIds.filter((id) => id !== employeeId),
+        attendance: (prev.attendance ?? []).map((a) =>
+          a.employeeId === employeeId && (a.leftAt == null || a.leftAt === "")
+            ? { ...a, leftAt }
+            : a
+        ),
+      };
+      void AsyncStorage.setItem(SHIFT_KEY, JSON.stringify(state));
+      return state;
+    });
   }, []);
 
   const addChecklist = useCallback(
@@ -528,6 +603,7 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
       startTime: null,
       startDate: null,
       employeeIds: [],
+      attendance: [],
     };
     setShiftState(state);
     setStopList([]);
@@ -743,6 +819,8 @@ export function BonifaceProvider({ children }: { children: React.ReactNode }) {
         setPremium,
         startShift,
         endShift,
+        addEmployeesToShift,
+        removeEmployeeFromShift,
         updateStockQuantity,
         addStockItem,
         updateStockItem,

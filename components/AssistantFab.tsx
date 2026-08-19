@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import { useAssistantChat } from "@/context/AssistantChatContext";
 import { useColors } from "@/hooks/useColors";
@@ -42,6 +43,7 @@ export function AssistantFab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tr, isRTL } = useLang();
+  const { isOwner, isPlatformAdmin } = useAuth();
   const { open, openChat, closeChat } = useAssistantChat();
   const liveContext = useAssistantLiveContext();
   const pathname = usePathname();
@@ -146,6 +148,8 @@ export function AssistantFab() {
   const sideStyle = isRTL
     ? { left: 16 }
     : { right: 16 };
+
+  if (isOwner || isPlatformAdmin) return null;
 
   return (
     <>

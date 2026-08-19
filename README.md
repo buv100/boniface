@@ -2,6 +2,14 @@
 
 Bar management app (Expo / React Native) with a local Express + SQLite API.
 
+## Share with friends (no install)
+
+Open **https://boniface.expo.app** — it talks to the cloud API at `https://boniface-api.onrender.com`.
+
+Demo login: phone `0501234567` · PIN `2020`.
+
+The first tap after idle can take ~30–60s (Render free tier). Data on the free API can reset after a redeploy.
+
 ## Run mobile
 
 ```bash

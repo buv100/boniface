@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { calcHoursWorkedQuarter } from "@/lib/shiftTime";
 import { teamTipsService } from "@/lib/services/teamTipsService";
 import { useAuth } from "./AuthContext";
 
@@ -160,7 +161,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setIsSyncing(true);
       try {
         const { employees: emps, dayEntries: entries } = await teamTipsService.pullFromCloud(token);
-        if (emps) setEmployees(emps.map(mapRemoteEmployee));
+        if (emps) setEmployees((emps as RemoteEmployee[]).map(mapRemoteEmployee));
         if (entries) setDayEntries(entries.map(mapRemoteDayEntry));
       } catch {
         // keep local state on network failure
@@ -281,14 +282,7 @@ export function useApp() {
 }
 
 export function calcHoursWorked(startTime: string, endTime: string): number {
-  const toMins = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
-  let s = toMins(startTime);
-  let e = toMins(endTime);
-  if (e <= s) e += 24 * 60;
-  return (e - s) / 60;
+  return calcHoursWorkedQuarter(startTime, endTime);
 }
 
 export function calcDayResults(entry: DayEntry): ShiftResult[] {

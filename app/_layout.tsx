@@ -27,22 +27,63 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RoleGate({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, isEmployee, isManager, isLoading } = useAuth();
+  const { isLoggedIn, isEmployee, isManager, isOwner, isPlatformAdmin, ownerAccessActive, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     if (isLoading) return;
     const root = String(segments[0] ?? "");
+    const second = String(segments[1] ?? "");
     const inEmployee = root === "employee";
-    // Shared screens both roles can open
-    const sharedRoots = new Set(["assistant", "privacy", "terms", "account"]);
-    if (isLoggedIn && isEmployee && !inEmployee && !sharedRoots.has(root)) {
+    const inOwner = root === "owner";
+    const inAdmin = root === "admin";
+    const legal = new Set(["assistant", "privacy", "terms"]);
+    const guestOk = legal.has(root) || root === "account" || (inAdmin && second === "login");
+
+    if (!isLoggedIn) {
+      if (inAdmin && second !== "login") {
+        router.replace("/admin/login" as any);
+        return;
+      }
+      if (!guestOk) {
+        router.replace("/account" as any);
+      }
+      return;
+    }
+
+    if (isPlatformAdmin) {
+      if (!inAdmin && !legal.has(root)) {
+        router.replace("/admin" as any);
+      }
+      return;
+    }
+
+    if (isOwner) {
+      if (inAdmin) {
+        router.replace((ownerAccessActive ? "/owner/hub" : "/owner/blocked") as any);
+        return;
+      }
+      if (!ownerAccessActive && !(inOwner && second === "blocked")) {
+        router.replace("/owner/blocked" as any);
+        return;
+      }
+      if (ownerAccessActive && inOwner && second === "blocked") {
+        router.replace("/owner/hub" as any);
+        return;
+      }
+      if (!inOwner && !legal.has(root) && root !== "account") {
+        router.replace("/owner" as any);
+      }
+      return;
+    }
+
+    if (isLoggedIn && isEmployee && !inEmployee && !legal.has(root) && root !== "account") {
       router.replace("/employee" as any);
-    } else if (isLoggedIn && isManager && inEmployee) {
+    } else if (isLoggedIn && isManager && (inEmployee || inOwner || inAdmin)) {
       router.replace("/");
     }
-  }, [isLoggedIn, isEmployee, isManager, isLoading, segments, router]);
+  }, [isLoggedIn, isEmployee, isManager, isOwner, isPlatformAdmin, ownerAccessActive, isLoading, segments, router]);
 
   return <>{children}</>;
 }
@@ -52,6 +93,8 @@ function RootLayoutNav() {
     <RoleGate>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="owner" options={{ headerShown: false }} />
+        <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="employee" options={{ headerShown: false }} />
         <Stack.Screen name="cards" options={{ headerShown: false }} />
         <Stack.Screen name="account" options={{ headerShown: false, presentation: "modal" }} />

@@ -22,7 +22,7 @@ sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
 
 export const db = drizzle(sqlite, { schema });
-export { sqlite };
+export { sqlite, dataDir };
 
 /** Create tables if missing so `npm run api` works without drizzle-kit. */
 export function ensureSchema(): void {
@@ -175,11 +175,156 @@ export function ensureSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_shift_slots_venue_date ON shift_slots(venue_id, date);
     CREATE INDEX IF NOT EXISTS idx_shift_claims_slot ON shift_claims(slot_id);
     CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
+
+    CREATE TABLE IF NOT EXISTS owners (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL UNIQUE,
+      pin_hash TEXT NOT NULL,
+      company_id TEXT,
+      address TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      company_id TEXT,
+      address TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS staff (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      phone TEXT,
+      job_role TEXT NOT NULL DEFAULT 'bartender',
+      custom_role TEXT,
+      permissions TEXT NOT NULL DEFAULT '[]',
+      pay_type TEXT NOT NULL DEFAULT 'hourly',
+      pay_amount REAL NOT NULL DEFAULT 0,
+      national_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS staff_documents (
+      id TEXT PRIMARY KEY,
+      staff_id TEXT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      mime_type TEXT,
+      storage_path TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS inventory_items (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      department TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'other',
+      quantity REAL NOT NULL DEFAULT 0,
+      unit TEXT NOT NULL DEFAULT 'pcs',
+      min_quantity REAL NOT NULL DEFAULT 0,
+      supplier_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS recipes (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      department TEXT NOT NULL,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'item',
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS recipe_lines (
+      id TEXT PRIMARY KEY,
+      recipe_id TEXT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+      inventory_item_id TEXT REFERENCES inventory_items(id) ON DELETE SET NULL,
+      sub_recipe_id TEXT REFERENCES recipes(id) ON DELETE SET NULL,
+      quantity REAL NOT NULL,
+      unit TEXT NOT NULL DEFAULT 'pcs'
+    );
+
+    CREATE TABLE IF NOT EXISTS suppliers (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      phone TEXT,
+      what_supplies TEXT,
+      schedule_note TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_staff_venue ON staff(venue_id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_venue ON inventory_items(venue_id);
+    CREATE INDEX IF NOT EXISTS idx_recipes_venue ON recipes(venue_id);
+    CREATE INDEX IF NOT EXISTS idx_suppliers_venue ON suppliers(venue_id);
+    CREATE INDEX IF NOT EXISTS idx_org_owner ON organizations(owner_id);
+
+    CREATE TABLE IF NOT EXISTS platform_admins (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL UNIQUE,
+      pin_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT NOT NULL REFERENCES platform_admins(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS org_subscriptions (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'suspended',
+      plan TEXT NOT NULL DEFAULT 'standard',
+      expires_at TEXT NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Lightweight migrations for existing DBs
   const stockCols = sqlite.prepare(`PRAGMA table_info(stock_items)`).all() as { name: string }[];
   if (!stockCols.some((c) => c.name === "sub_category")) {
     sqlite.exec(`ALTER TABLE stock_items ADD COLUMN sub_category TEXT`);
+  }
+
+  const venueCols = sqlite.prepare(`PRAGMA table_info(venues)`).all() as { name: string }[];
+  if (!venueCols.some((c) => c.name === "organization_id")) {
+    sqlite.exec(`ALTER TABLE venues ADD COLUMN organization_id TEXT`);
+  }
+  if (!venueCols.some((c) => c.name === "kind")) {
+    sqlite.exec(`ALTER TABLE venues ADD COLUMN kind TEXT NOT NULL DEFAULT 'bar'`);
+  }
+  if (!venueCols.some((c) => c.name === "address")) {
+    sqlite.exec(`ALTER TABLE venues ADD COLUMN address TEXT`);
+  }
+
+  const sessionCols = sqlite.prepare(`PRAGMA table_info(sessions)`).all() as { name: string }[];
+  if (!sessionCols.some((c) => c.name === "owner_id")) {
+    sqlite.exec(`ALTER TABLE sessions ADD COLUMN owner_id TEXT`);
+  }
+  if (!sessionCols.some((c) => c.name === "organization_id")) {
+    sqlite.exec(`ALTER TABLE sessions ADD COLUMN organization_id TEXT`);
   }
 }

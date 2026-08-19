@@ -3,18 +3,35 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { db } from "../db";
-import { employees, inviteCodes, managers, subscriptions, venues } from "../db/schema";
 import {
+  employees,
+  inviteCodes,
+  managers,
+  organizations,
+  owners,
+  platformAdmins,
+  subscriptions,
+  venues,
+} from "../db/schema";
+import {
+  createAdminSession,
   createSession,
   destroySession,
+  getOrgBilling,
   hashPin,
   newId,
   normalizePhone,
   nowIso,
   publicManager,
+  publicOrganization,
+  publicOrgSubscription,
+  publicOwner,
+  publicPlatformAdmin,
   publicVenue,
   questionHint,
   requireAuth,
+  requireOwner,
+  requirePaidOrg,
   verifyPin,
 } from "../middleware/auth";
 
@@ -167,8 +184,175 @@ router.post("/login", async (req, res) => {
   });
 });
 
+const ownerLoginSchema = z.object({
+  phone: z.string().min(5),
+  pin: z.string().min(4),
+});
+
+const selectVenueSchema = z.object({
+  venueId: z.string().min(1),
+});
+
+function listOwnerVenues(organizationId: string) {
+  return db
+    .select()
+    .from(venues)
+    .where(eq(venues.organizationId, organizationId))
+    .all()
+    .map(publicVenue);
+}
+
+async function ownerSessionJson(opts: {
+  ownerId: string;
+  organizationId: string;
+  venueId: string;
+}) {
+  const token = await createSession({
+    venueId: opts.venueId,
+    ownerId: opts.ownerId,
+    organizationId: opts.organizationId,
+    role: "owner",
+  });
+  const owner = db.select().from(owners).where(eq(owners.id, opts.ownerId)).get()!;
+  const organization = db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, opts.organizationId))
+    .get()!;
+  const venueList = listOwnerVenues(opts.organizationId);
+  const venue = venueList.find((v) => v.id === opts.venueId) ?? venueList[0];
+  const subscription = publicOrgSubscription(getOrgBilling(opts.organizationId));
+  return {
+    token,
+    role: "owner" as const,
+    owner: publicOwner(owner),
+    organization: publicOrganization(organization),
+    venue,
+    venues: venueList,
+    subscription,
+    ...(subscription.isActive ? {} : { code: "SUBSCRIPTION_INACTIVE" as const }),
+  };
+}
+
+router.post("/owner/register", (_req, res) => {
+  res.status(403).json({
+    error: "Owner self-registration is closed",
+    code: "NO_PUBLIC_SIGNUP",
+  });
+});
+
+router.post("/owner/login", async (req, res) => {
+  const parsed = ownerLoginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid login data" });
+    return;
+  }
+
+  const phone = normalizePhone(parsed.data.phone);
+  const owner = db.select().from(owners).where(eq(owners.phone, phone)).get();
+  if (!owner || !(await verifyPin(parsed.data.pin, owner.pinHash))) {
+    res.status(401).json({ error: "Invalid phone or PIN" });
+    return;
+  }
+
+  const org = db.select().from(organizations).where(eq(organizations.ownerId, owner.id)).get();
+  if (!org) {
+    res.status(500).json({ error: "Organization missing" });
+    return;
+  }
+
+  const venueList = listOwnerVenues(org.id);
+  if (!venueList.length) {
+    res.status(500).json({ error: "No venues" });
+    return;
+  }
+
+  const payload = await ownerSessionJson({
+    ownerId: owner.id,
+    organizationId: org.id,
+    venueId: venueList[0].id,
+  });
+  res.json(payload);
+});
+
+router.post("/admin/login", async (req, res) => {
+  const parsed = ownerLoginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid login data" });
+    return;
+  }
+  const phone = normalizePhone(parsed.data.phone);
+  const admin = db.select().from(platformAdmins).where(eq(platformAdmins.phone, phone)).get();
+  if (!admin || !(await verifyPin(parsed.data.pin, admin.pinHash))) {
+    res.status(401).json({ error: "Invalid phone or PIN" });
+    return;
+  }
+  const token = await createAdminSession(admin.id);
+  res.json({
+    token,
+    role: "platform_admin" as const,
+    admin: publicPlatformAdmin(admin),
+  });
+});
+
+router.post("/select-venue", requireOwner, requirePaidOrg, async (req, res) => {
+  const parsed = selectVenueSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid venue" });
+    return;
+  }
+  const auth = req.auth!;
+  const venue = db.select().from(venues).where(eq(venues.id, parsed.data.venueId)).get();
+  if (!venue || venue.organizationId !== auth.organizationId) {
+    res.status(404).json({ error: "Venue not found" });
+    return;
+  }
+  await destroySession(auth.sessionId);
+  const payload = await ownerSessionJson({
+    ownerId: auth.ownerId!,
+    organizationId: auth.organizationId!,
+    venueId: venue.id,
+  });
+  res.json(payload);
+});
+
 router.get("/me", requireAuth, (req, res) => {
   const auth = req.auth!;
+
+  if (auth.role === "platform_admin" && auth.platformAdminId) {
+    const admin = db.select().from(platformAdmins).where(eq(platformAdmins.id, auth.platformAdminId)).get();
+    if (!admin) {
+      res.status(401).json({ error: "Session invalid" });
+      return;
+    }
+    res.json({ role: "platform_admin", admin: publicPlatformAdmin(admin) });
+    return;
+  }
+
+  if (auth.role === "owner" && auth.ownerId && auth.organizationId) {
+    const owner = db.select().from(owners).where(eq(owners.id, auth.ownerId)).get();
+    const organization = db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, auth.organizationId))
+      .get();
+    const venueList = listOwnerVenues(auth.organizationId);
+    const venue = venueList.find((v) => v.id === auth.venueId) ?? venueList[0] ?? null;
+    if (!owner || !organization || !venue) {
+      res.status(401).json({ error: "Session invalid" });
+      return;
+    }
+    const subscription = publicOrgSubscription(getOrgBilling(auth.organizationId));
+    res.json({
+      role: "owner",
+      owner: publicOwner(owner),
+      organization: publicOrganization(organization),
+      venue,
+      venues: venueList,
+      subscription,
+    });
+    return;
+  }
 
   if (auth.role === "manager" && auth.managerId) {
     const manager = db.select().from(managers).where(eq(managers.id, auth.managerId)).get();

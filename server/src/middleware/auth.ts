@@ -6,11 +6,21 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
 import { db } from "../db";
-import { managers, sessions, subscriptions, venues } from "../db/schema";
+import {
+  adminSessions,
+  managers,
+  organizations,
+  orgSubscriptions,
+  owners,
+  platformAdmins,
+  sessions,
+  subscriptions,
+  venues,
+} from "../db/schema";
 
 const SESSION_DAYS = 90;
 
-export type AuthRole = "manager" | "employee";
+export type AuthRole = "manager" | "employee" | "owner" | "platform_admin";
 
 export interface AuthUser {
   sessionId: string;
@@ -18,6 +28,9 @@ export interface AuthUser {
   role: AuthRole;
   managerId?: string;
   employeeId?: string;
+  ownerId?: string;
+  organizationId?: string;
+  platformAdminId?: string;
 }
 
 declare global {
@@ -66,16 +79,21 @@ export function questionHint(question: string | null | undefined): string | unde
 
 interface TokenPayload {
   sid: string;
-  venueId: string;
+  venueId?: string;
   role: AuthRole;
   managerId?: string;
   employeeId?: string;
+  ownerId?: string;
+  organizationId?: string;
+  platformAdminId?: string;
 }
 
 export async function createSession(opts: {
   venueId: string;
   managerId?: string;
   employeeId?: string;
+  ownerId?: string;
+  organizationId?: string;
   role: AuthRole;
 }): Promise<string> {
   const sessionId = newId();
@@ -89,6 +107,8 @@ export async function createSession(opts: {
     role: opts.role,
     managerId: opts.managerId,
     employeeId: opts.employeeId,
+    ownerId: opts.ownerId,
+    organizationId: opts.organizationId,
   };
 
   const token = jwt.sign(payload, getJwtSecret(), { expiresIn: `${SESSION_DAYS}d` });
@@ -99,7 +119,36 @@ export async function createSession(opts: {
       id: sessionId,
       managerId: opts.managerId ?? null,
       employeeId: opts.employeeId ?? null,
+      ownerId: opts.ownerId ?? null,
+      organizationId: opts.organizationId ?? null,
       venueId: opts.venueId,
+      tokenHash: hashToken(token),
+      expiresAt,
+      createdAt,
+    })
+    .run();
+
+  return token;
+}
+
+export async function createAdminSession(
+  adminId: string,
+  expiresInDays = 30
+): Promise<string> {
+  const sessionId = newId();
+  const payload: TokenPayload = {
+    sid: sessionId,
+    role: "platform_admin",
+    platformAdminId: adminId,
+  };
+  const token = jwt.sign(payload, getJwtSecret(), { expiresIn: `${expiresInDays}d` });
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
+
+  db.insert(adminSessions)
+    .values({
+      id: sessionId,
+      adminId,
       tokenHash: hashToken(token),
       expiresAt,
       createdAt,
@@ -111,6 +160,7 @@ export async function createSession(opts: {
 
 export async function destroySession(sessionId: string): Promise<void> {
   db.delete(sessions).where(eq(sessions.id, sessionId)).run();
+  db.delete(adminSessions).where(eq(adminSessions.id, sessionId)).run();
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
@@ -123,6 +173,33 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = header.slice(7);
   try {
     const payload = jwt.verify(token, getJwtSecret()) as TokenPayload;
+
+    if (payload.role === "platform_admin") {
+      const row = db.select().from(adminSessions).where(eq(adminSessions.id, payload.sid)).get();
+      if (!row) {
+        res.status(401).json({ error: "Session expired" });
+        return;
+      }
+      if (row.tokenHash !== hashToken(token)) {
+        res.status(401).json({ error: "Invalid token" });
+        return;
+      }
+      if (new Date(row.expiresAt).getTime() < Date.now()) {
+        db.delete(adminSessions).where(eq(adminSessions.id, row.id)).run();
+        res.status(401).json({ error: "Session expired" });
+        return;
+      }
+      req.token = token;
+      req.auth = {
+        sessionId: payload.sid,
+        venueId: "",
+        role: "platform_admin",
+        platformAdminId: payload.platformAdminId,
+      };
+      next();
+      return;
+    }
+
     const row = db.select().from(sessions).where(eq(sessions.id, payload.sid)).get();
     if (!row) {
       res.status(401).json({ error: "Session expired" });
@@ -141,10 +218,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     req.token = token;
     req.auth = {
       sessionId: payload.sid,
-      venueId: payload.venueId,
+      venueId: payload.venueId ?? row.venueId,
       role: payload.role,
       managerId: payload.managerId,
       employeeId: payload.employeeId,
+      ownerId: payload.ownerId,
+      organizationId: payload.organizationId,
     };
     next();
   } catch {
@@ -175,6 +254,8 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction): 
         role: payload.role,
         managerId: payload.managerId,
         employeeId: payload.employeeId,
+        ownerId: payload.ownerId,
+        organizationId: payload.organizationId,
       };
     }
   } catch {
@@ -227,6 +308,145 @@ export function requireActiveSubscription(req: Request, res: Response, next: Nex
   });
 }
 
+export function requireOwner(req: Request, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    if (req.auth?.role !== "owner" || !req.auth.ownerId || !req.auth.organizationId) {
+      res.status(403).json({ error: "Owner access required" });
+      return;
+    }
+    next();
+  });
+}
+
+export type OrgSubStatus = "active" | "past_due" | "suspended";
+
+export interface OrgBilling {
+  id: string | null;
+  organizationId: string;
+  status: OrgSubStatus;
+  plan: string | null;
+  expiresAt: string | null;
+  notes: string | null;
+  isActive: boolean;
+}
+
+export function getOrgBilling(organizationId: string): OrgBilling {
+  const row = db
+    .select()
+    .from(orgSubscriptions)
+    .where(eq(orgSubscriptions.organizationId, organizationId))
+    .get();
+  if (!row) {
+    return {
+      id: null,
+      organizationId,
+      status: "suspended",
+      plan: null,
+      expiresAt: null,
+      notes: null,
+      isActive: false,
+    };
+  }
+  const status = (row.status as OrgSubStatus) || "suspended";
+  const notExpired = new Date(row.expiresAt).getTime() > Date.now();
+  const isActive = status === "active" && notExpired;
+  return {
+    id: row.id,
+    organizationId,
+    status,
+    plan: row.plan,
+    expiresAt: row.expiresAt,
+    notes: row.notes,
+    isActive,
+  };
+}
+
+export function publicOrgSubscription(billing: OrgBilling) {
+  return {
+    id: billing.id,
+    status: billing.status,
+    plan: billing.plan,
+    expiresAt: billing.expiresAt,
+    notes: billing.notes,
+    isActive: billing.isActive,
+  };
+}
+
+export function requirePaidOrg(req: Request, res: Response, next: NextFunction): void {
+  const orgId = req.auth?.organizationId;
+  if (!orgId) {
+    res.status(402).json({
+      error: "Subscription inactive",
+      code: "SUBSCRIPTION_INACTIVE",
+    });
+    return;
+  }
+  const billing = getOrgBilling(orgId);
+  if (!billing.isActive) {
+    res.status(402).json({
+      error: "Subscription inactive",
+      code: "SUBSCRIPTION_INACTIVE",
+      subscription: publicOrgSubscription(billing),
+    });
+    return;
+  }
+  next();
+}
+
+export function requirePlatformAdmin(req: Request, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    if (req.auth?.role !== "platform_admin" || !req.auth.platformAdminId) {
+      res.status(403).json({ error: "Platform admin access required" });
+      return;
+    }
+    next();
+  });
+}
+
+export function publicPlatformAdmin(admin: typeof platformAdmins.$inferSelect) {
+  return {
+    id: admin.id,
+    name: admin.name,
+    phone: admin.phone,
+    createdAt: admin.createdAt,
+  };
+}
+
+export async function bootstrapPlatformAdmin(): Promise<void> {
+  const phoneRaw = process.env.PLATFORM_ADMIN_PHONE?.trim() || "0501234567";
+  const pin = process.env.PLATFORM_ADMIN_PIN?.trim() || "2020";
+  const phone = normalizePhone(phoneRaw);
+  const name = process.env.PLATFORM_ADMIN_NAME?.trim() || "Boniface";
+  const pinHash = await hashPin(pin);
+  const now = nowIso();
+
+  const byPhone = db.select().from(platformAdmins).where(eq(platformAdmins.phone, phone)).get();
+  if (byPhone) {
+    db.update(platformAdmins).set({ pinHash, name }).where(eq(platformAdmins.id, byPhone.id)).run();
+    return;
+  }
+
+  const first = db.select().from(platformAdmins).all()[0];
+  if (first) {
+    db.update(platformAdmins)
+      .set({ phone, pinHash, name })
+      .where(eq(platformAdmins.id, first.id))
+      .run();
+    return;
+  }
+
+  db.insert(platformAdmins)
+    .values({
+      id: newId(),
+      name,
+      phone,
+      pinHash,
+      createdAt: now,
+    })
+    .run();
+  console.log(`Bootstrapped platform admin for ${phone}`);
+}
+
 export function publicManager(manager: typeof managers.$inferSelect) {
   return {
     id: manager.id,
@@ -237,14 +457,43 @@ export function publicManager(manager: typeof managers.$inferSelect) {
   };
 }
 
+export function publicOwner(owner: typeof owners.$inferSelect) {
+  return {
+    id: owner.id,
+    name: owner.name,
+    phone: owner.phone,
+    email: owner.email,
+    companyId: owner.companyId,
+    address: owner.address,
+    createdAt: owner.createdAt,
+    updatedAt: owner.updatedAt,
+  };
+}
+
+export function publicOrganization(org: typeof organizations.$inferSelect) {
+  return {
+    id: org.id,
+    ownerId: org.ownerId,
+    name: org.name,
+    companyId: org.companyId,
+    address: org.address,
+    createdAt: org.createdAt,
+    updatedAt: org.updatedAt,
+  };
+}
+
 export function publicVenue(venue: typeof venues.$inferSelect) {
   return {
     id: venue.id,
     name: venue.name,
+    organizationId: venue.organizationId,
+    kind: venue.kind,
+    address: venue.address,
     currency: venue.currency,
     timezone: venue.timezone,
     createdAt: venue.createdAt,
     updatedAt: venue.updatedAt,
+    alerts: [] as { id: string; venueId: string; topic: string; severity: string; message: string; createdAt: string }[],
   };
 }
 

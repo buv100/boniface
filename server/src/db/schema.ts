@@ -1,8 +1,35 @@
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const owners = sqliteTable("owners", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  phone: text("phone").notNull().unique(),
+  email: text("email").notNull().unique(),
+  pinHash: text("pin_hash").notNull(),
+  companyId: text("company_id"),
+  address: text("address"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const organizations = sqliteTable("organizations", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id")
+    .notNull()
+    .references(() => owners.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  companyId: text("company_id"),
+  address: text("address"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const venues = sqliteTable("venues", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull().default("bar"),
+  address: text("address"),
   currency: text("currency").notNull().default("ILS"),
   timezone: text("timezone").notNull().default("Asia/Jerusalem"),
   createdAt: text("created_at").notNull(),
@@ -40,6 +67,8 @@ export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
   managerId: text("manager_id").references(() => managers.id, { onDelete: "cascade" }),
   employeeId: text("employee_id").references(() => employees.id, { onDelete: "cascade" }),
+  ownerId: text("owner_id").references(() => owners.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
   venueId: text("venue_id")
     .notNull()
     .references(() => venues.id, { onDelete: "cascade" }),
@@ -168,4 +197,122 @@ export const inviteCodes = sqliteTable("invite_codes", {
   createdByManagerId: text("created_by_manager_id").references(() => managers.id, {
     onDelete: "set null",
   }),
+});
+
+export const staff = sqliteTable("staff", {
+  id: text("id").primaryKey(),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  jobRole: text("job_role").notNull().default("bartender"),
+  customRole: text("custom_role"),
+  permissions: text("permissions").notNull().default("[]"),
+  payType: text("pay_type").notNull().default("hourly"),
+  payAmount: real("pay_amount").notNull().default(0),
+  nationalId: text("national_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const staffDocuments = sqliteTable("staff_documents", {
+  id: text("id").primaryKey(),
+  staffId: text("staff_id")
+    .notNull()
+    .references(() => staff.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type"),
+  storagePath: text("storage_path").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const inventoryItems = sqliteTable("inventory_items", {
+  id: text("id").primaryKey(),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id, { onDelete: "cascade" }),
+  department: text("department").notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull().default("other"),
+  quantity: real("quantity").notNull().default(0),
+  unit: text("unit").notNull().default("pcs"),
+  minQuantity: real("min_quantity").notNull().default(0),
+  supplierId: text("supplier_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const recipes = sqliteTable("recipes", {
+  id: text("id").primaryKey(),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id, { onDelete: "cascade" }),
+  department: text("department").notNull(),
+  name: text("name").notNull(),
+  kind: text("kind").notNull().default("item"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const recipeLines = sqliteTable("recipe_lines", {
+  id: text("id").primaryKey(),
+  recipeId: text("recipe_id")
+    .notNull()
+    .references(() => recipes.id, { onDelete: "cascade" }),
+  inventoryItemId: text("inventory_item_id").references(() => inventoryItems.id, {
+    onDelete: "set null",
+  }),
+  subRecipeId: text("sub_recipe_id").references(() => recipes.id, { onDelete: "set null" }),
+  quantity: real("quantity").notNull(),
+  unit: text("unit").notNull().default("pcs"),
+});
+
+export const suppliers = sqliteTable("suppliers", {
+  id: text("id").primaryKey(),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  whatSupplies: text("what_supplies"),
+  scheduleNote: text("schedule_note"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const platformAdmins = sqliteTable("platform_admins", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  phone: text("phone").notNull().unique(),
+  pinHash: text("pin_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const adminSessions = sqliteTable("admin_sessions", {
+  id: text("id").primaryKey(),
+  adminId: text("admin_id")
+    .notNull()
+    .references(() => platformAdmins.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+/** Billing for a restaurant group — not per venue. */
+export const orgSubscriptions = sqliteTable("org_subscriptions", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .unique()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("suspended"),
+  plan: text("plan").notNull().default("standard"),
+  expiresAt: text("expires_at").notNull(),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
 });

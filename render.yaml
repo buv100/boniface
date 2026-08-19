@@ -23,3 +23,13 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
+      - key: PLATFORM_ADMIN_NAME
+        value: Boniface
+      - key: PLATFORM_ADMIN_PHONE
+        value: "0501234567"
+      - key: PLATFORM_ADMIN_PIN
+        value: "2020"
+      - key: DEV_LOGIN_PHONE
+        value: "0501234567"
+      - key: DEV_LOGIN_PIN
+        value: "2020"
