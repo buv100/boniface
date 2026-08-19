@@ -97,6 +97,7 @@ export interface InventoryItem {
   quantity: number;
   unit: string;
   minQuantity: number;
+  unitCost: number;
   supplierId: string | null;
   belowMin: boolean;
   createdAt: string;
@@ -118,6 +119,7 @@ export interface Recipe {
   name: string;
   kind: string;
   notes: string | null;
+  cost: number;
   lines: RecipeLine[];
   createdAt: string;
   updatedAt: string;
@@ -135,4 +137,33 @@ export interface Supplier {
   lowStockItems?: InventoryItem[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LedgerEntry {
+  id: string;
+  venueId: string;
+  date: string;
+  kind: "revenue" | "expense" | string;
+  amount: number;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface FinanceSummary {
+  month: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
+  entries: LedgerEntry[];
+}
+
+export interface WorkShift {
+  id: string;
+  venueId: string;
+  staffId: string;
+  staffName: string;
+  startsAt: string;
+  endsAt: string;
+  note: string | null;
+  createdAt: string;
 }

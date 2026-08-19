@@ -25,6 +25,7 @@ export default function OwnerInventoryScreen() {
   const [quantity, setQuantity] = useState("0");
   const [unit, setUnit] = useState("pcs");
   const [minQuantity, setMinQuantity] = useState("0");
+  const [unitCost, setUnitCost] = useState("0");
   const [supplierId, setSupplierId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -50,6 +51,7 @@ export default function OwnerInventoryScreen() {
     setQuantity("0");
     setUnit("pcs");
     setMinQuantity("0");
+    setUnitCost("0");
     setSupplierId(null);
   };
 
@@ -62,6 +64,7 @@ export default function OwnerInventoryScreen() {
       quantity: parseFloat(quantity) || 0,
       unit: unit.trim() || "pcs",
       minQuantity: parseFloat(minQuantity) || 0,
+      unitCost: parseFloat(unitCost) || 0,
       supplierId,
     };
     if (editId) await apiCall(`/owner/inventory/${editId}`, { method: "PATCH", token, body });
@@ -122,6 +125,7 @@ export default function OwnerInventoryScreen() {
                 setQuantity(String(item.quantity));
                 setUnit(item.unit);
                 setMinQuantity(String(item.minQuantity));
+                setUnitCost(String(item.unitCost ?? 0));
                 setSupplierId(item.supplierId);
                 setOpen(true);
               }}
@@ -129,6 +133,7 @@ export default function OwnerInventoryScreen() {
               <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold", fontSize: 16 }}>{item.name}</Text>
               <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
                 {item.quantity} {item.unit} · min {item.minQuantity}
+                {item.unitCost ? ` · ${item.unitCost} ₪` : ""}
                 {item.belowMin ? ` · ${tr.owner.belowMin}` : ""}
               </Text>
             </TouchableOpacity>
@@ -181,6 +186,14 @@ export default function OwnerInventoryScreen() {
                 onChangeText={setMinQuantity}
               />
             </View>
+            <TextInput
+              style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
+              placeholder={tr.owner.unitCost}
+              placeholderTextColor={colors.mutedForeground}
+              keyboardType="numeric"
+              value={unitCost}
+              onChangeText={setUnitCost}
+            />
             {suppliers.length > 0 && (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
                 {suppliers.map((s) => (

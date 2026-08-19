@@ -8,6 +8,7 @@ import { z } from "zod";
 import { dataDir, db } from "../db";
 import {
   inventoryItems,
+  ledgerEntries,
   organizations,
   recipeLines,
   recipes,
@@ -15,6 +16,7 @@ import {
   staffDocuments,
   suppliers,
   venues,
+  workShifts,
 } from "../db/schema";
 import {
   newId,
@@ -78,11 +80,28 @@ function publicInventory(row: typeof inventoryItems.$inferSelect) {
     quantity: row.quantity,
     unit: row.unit,
     minQuantity: row.minQuantity,
+    unitCost: row.unitCost ?? 0,
     supplierId: row.supplierId,
     belowMin: row.quantity < row.minQuantity,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function computeRecipeCost(recipeId: string, seen = new Set<string>()): number {
+  if (seen.has(recipeId)) return 0;
+  seen.add(recipeId);
+  const lines = db.select().from(recipeLines).where(eq(recipeLines.recipeId, recipeId)).all();
+  let total = 0;
+  for (const line of lines) {
+    if (line.inventoryItemId) {
+      const item = db.select().from(inventoryItems).where(eq(inventoryItems.id, line.inventoryItemId)).get();
+      total += (item?.unitCost ?? 0) * line.quantity;
+    } else if (line.subRecipeId) {
+      total += computeRecipeCost(line.subRecipeId, seen) * line.quantity;
+    }
+  }
+  return Math.round(total * 100) / 100;
 }
 
 function publicRecipe(
@@ -96,6 +115,7 @@ function publicRecipe(
     name: row.name,
     kind: row.kind,
     notes: row.notes,
+    cost: computeRecipeCost(row.id),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lines: lines.map((l) => ({
@@ -165,6 +185,7 @@ const inventorySchema = z.object({
   quantity: z.number().min(0).default(0),
   unit: z.string().min(1).default("pcs"),
   minQuantity: z.number().min(0).default(0),
+  unitCost: z.number().min(0).default(0),
   supplierId: z.string().nullable().optional(),
 });
 
@@ -486,6 +507,7 @@ router.post("/inventory", (req, res) => {
       quantity: parsed.data.quantity,
       unit: parsed.data.unit.trim(),
       minQuantity: parsed.data.minQuantity,
+      unitCost: parsed.data.unitCost,
       supplierId: parsed.data.supplierId || null,
       createdAt: now,
       updatedAt: now,
@@ -520,6 +542,7 @@ router.patch("/inventory/:id", (req, res) => {
       ...(parsed.data.quantity !== undefined ? { quantity: parsed.data.quantity } : {}),
       ...(parsed.data.unit ? { unit: parsed.data.unit.trim() } : {}),
       ...(parsed.data.minQuantity !== undefined ? { minQuantity: parsed.data.minQuantity } : {}),
+      ...(parsed.data.unitCost !== undefined ? { unitCost: parsed.data.unitCost } : {}),
       ...(parsed.data.supplierId !== undefined ? { supplierId: parsed.data.supplierId } : {}),
       updatedAt: nowIso(),
     })
@@ -759,6 +782,199 @@ router.delete("/suppliers/:id", (req, res) => {
     return;
   }
   db.delete(suppliers).where(eq(suppliers.id, row.id)).run();
+  res.status(204).send();
+});
+
+// —— Finance ——
+
+function monthBounds(ym: string): { start: string; end: string } | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return null;
+  const last = new Date(year, month, 0).getDate();
+  return {
+    start: `${m[1]}-${m[2]}-01`,
+    end: `${m[1]}-${m[2]}-${String(last).padStart(2, "0")}`,
+  };
+}
+
+function publicLedger(row: typeof ledgerEntries.$inferSelect) {
+  return {
+    id: row.id,
+    venueId: row.venueId,
+    date: row.date,
+    kind: row.kind,
+    amount: row.amount,
+    note: row.note,
+    createdAt: row.createdAt,
+  };
+}
+
+const ledgerSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  kind: z.enum(["revenue", "expense"]),
+  amount: z.number().positive(),
+  note: z.string().optional().nullable(),
+});
+
+router.get("/finance/summary", (req, res) => {
+  const { venueId } = venueScope(req);
+  const now = new Date();
+  const month =
+    typeof req.query.month === "string"
+      ? req.query.month
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const bounds = monthBounds(month);
+  if (!bounds) {
+    res.status(400).json({ error: "Invalid month" });
+    return;
+  }
+  const rows = db
+    .select()
+    .from(ledgerEntries)
+    .where(eq(ledgerEntries.venueId, venueId))
+    .all()
+    .filter((r) => r.date >= bounds.start && r.date <= bounds.end)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const revenue = rows.filter((r) => r.kind === "revenue").reduce((s, r) => s + r.amount, 0);
+  const expenses = rows.filter((r) => r.kind === "expense").reduce((s, r) => s + r.amount, 0);
+  res.json({
+    month,
+    revenue: Math.round(revenue * 100) / 100,
+    expenses: Math.round(expenses * 100) / 100,
+    profit: Math.round((revenue - expenses) * 100) / 100,
+    entries: rows.map(publicLedger),
+  });
+});
+
+router.post("/finance/entries", (req, res) => {
+  const parsed = ledgerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid entry" });
+    return;
+  }
+  const { venueId } = venueScope(req);
+  const id = newId();
+  db.insert(ledgerEntries)
+    .values({
+      id,
+      venueId,
+      date: parsed.data.date,
+      kind: parsed.data.kind,
+      amount: parsed.data.amount,
+      note: parsed.data.note?.trim() || null,
+      createdAt: nowIso(),
+    })
+    .run();
+  res.status(201).json(publicLedger(db.select().from(ledgerEntries).where(eq(ledgerEntries.id, id)).get()!));
+});
+
+router.delete("/finance/entries/:id", (req, res) => {
+  const { venueId } = venueScope(req);
+  const row = db
+    .select()
+    .from(ledgerEntries)
+    .where(and(eq(ledgerEntries.id, req.params.id), eq(ledgerEntries.venueId, venueId)))
+    .get();
+  if (!row) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  db.delete(ledgerEntries).where(eq(ledgerEntries.id, row.id)).run();
+  res.status(204).send();
+});
+
+// —— Schedule ——
+
+function publicShift(row: typeof workShifts.$inferSelect, staffName: string) {
+  return {
+    id: row.id,
+    venueId: row.venueId,
+    staffId: row.staffId,
+    staffName,
+    startsAt: row.startsAt,
+    endsAt: row.endsAt,
+    note: row.note,
+    createdAt: row.createdAt,
+  };
+}
+
+const shiftSchema = z.object({
+  staffId: z.string().min(1),
+  startsAt: z.string().min(10),
+  endsAt: z.string().min(10),
+  note: z.string().optional().nullable(),
+});
+
+router.get("/schedule", (req, res) => {
+  const { venueId } = venueScope(req);
+  const from = typeof req.query.from === "string" ? req.query.from : "";
+  const to = typeof req.query.to === "string" ? req.query.to : "";
+  const staffRows = db.select().from(staff).where(eq(staff.venueId, venueId)).all();
+  const names = new Map(staffRows.map((s) => [s.id, s.name]));
+  const rows = db
+    .select()
+    .from(workShifts)
+    .where(eq(workShifts.venueId, venueId))
+    .all()
+    .filter((s) => {
+      if (from && s.startsAt < from) return false;
+      if (to && s.startsAt > to) return false;
+      return true;
+    })
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  res.json(rows.map((r) => publicShift(r, names.get(r.staffId) ?? "")));
+});
+
+router.post("/schedule", (req, res) => {
+  const parsed = shiftSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid shift" });
+    return;
+  }
+  const { venueId } = venueScope(req);
+  const member = db
+    .select()
+    .from(staff)
+    .where(and(eq(staff.id, parsed.data.staffId), eq(staff.venueId, venueId)))
+    .get();
+  if (!member) {
+    res.status(400).json({ error: "Staff not found" });
+    return;
+  }
+  if (parsed.data.endsAt <= parsed.data.startsAt) {
+    res.status(400).json({ error: "End must be after start" });
+    return;
+  }
+  const id = newId();
+  db.insert(workShifts)
+    .values({
+      id,
+      venueId,
+      staffId: member.id,
+      startsAt: parsed.data.startsAt,
+      endsAt: parsed.data.endsAt,
+      note: parsed.data.note?.trim() || null,
+      createdAt: nowIso(),
+    })
+    .run();
+  res.status(201).json(publicShift(db.select().from(workShifts).where(eq(workShifts.id, id)).get()!, member.name));
+});
+
+router.delete("/schedule/:id", (req, res) => {
+  const { venueId } = venueScope(req);
+  const row = db
+    .select()
+    .from(workShifts)
+    .where(and(eq(workShifts.id, req.params.id), eq(workShifts.venueId, venueId)))
+    .get();
+  if (!row) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  db.delete(workShifts).where(eq(workShifts.id, row.id)).run();
   res.status(204).send();
 });
 

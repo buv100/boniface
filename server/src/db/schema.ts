@@ -239,6 +239,7 @@ export const inventoryItems = sqliteTable("inventory_items", {
   quantity: real("quantity").notNull().default(0),
   unit: text("unit").notNull().default("pcs"),
   minQuantity: real("min_quantity").notNull().default(0),
+  unitCost: real("unit_cost").notNull().default(0),
   supplierId: text("supplier_id"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -315,4 +316,30 @@ export const orgSubscriptions = sqliteTable("org_subscriptions", {
   notes: text("notes"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+});
+
+export const ledgerEntries = sqliteTable("ledger_entries", {
+  id: text("id").primaryKey(),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+  kind: text("kind").notNull(),
+  amount: real("amount").notNull(),
+  note: text("note"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const workShifts = sqliteTable("work_shifts", {
+  id: text("id").primaryKey(),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id, { onDelete: "cascade" }),
+  staffId: text("staff_id")
+    .notNull()
+    .references(() => staff.id, { onDelete: "cascade" }),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  note: text("note"),
+  createdAt: text("created_at").notNull(),
 });

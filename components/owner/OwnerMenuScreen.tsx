@@ -103,6 +103,7 @@ export function OwnerMenuScreen({ department }: { department: InventoryDepartmen
             <Text style={{ color: colors.foreground, fontFamily: "Inter_700Bold", fontSize: 16 }}>{r.name}</Text>
             <Text style={{ color: colors.mutedForeground, marginTop: 4 }}>
               {r.kind} · {r.lines.length} {tr.owner.lines}
+              {typeof r.cost === "number" ? ` · ${tr.owner.recipeCost}: ${r.cost} ₪` : ""}
             </Text>
           </TouchableOpacity>
         ))

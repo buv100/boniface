@@ -232,6 +232,7 @@ export function ensureSchema(): void {
       quantity REAL NOT NULL DEFAULT 0,
       unit TEXT NOT NULL DEFAULT 'pcs',
       min_quantity REAL NOT NULL DEFAULT 0,
+      unit_cost REAL NOT NULL DEFAULT 0,
       supplier_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -301,6 +302,26 @@ export function ensureSchema(): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS ledger_entries (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      amount REAL NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS work_shifts (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      staff_id TEXT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      starts_at TEXT NOT NULL,
+      ends_at TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Lightweight migrations for existing DBs
@@ -326,5 +347,10 @@ export function ensureSchema(): void {
   }
   if (!sessionCols.some((c) => c.name === "organization_id")) {
     sqlite.exec(`ALTER TABLE sessions ADD COLUMN organization_id TEXT`);
+  }
+
+  const invCols = sqlite.prepare(`PRAGMA table_info(inventory_items)`).all() as { name: string }[];
+  if (invCols.length && !invCols.some((c) => c.name === "unit_cost")) {
+    sqlite.exec(`ALTER TABLE inventory_items ADD COLUMN unit_cost REAL NOT NULL DEFAULT 0`);
   }
 }

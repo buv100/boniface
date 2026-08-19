@@ -48,14 +48,15 @@ Owner ──1── Organization (רשת/עסק)
 
 ## 3. דשבורד סניף (בעלים)
 
-בית: שלום + שם, תאריך/שעה, שם סניף (חזרה לרשת), כרטיסים:
+בית: שלום + שם, תאריך/שעה, שם סניף, **הכנסות / הוצאות / רווח לחודש**, כרטיסים:
 
 | כרטיס | תוכן |
 |-------|------|
+| סידור עבודה | שבוע + הוספת משמרת (עובד, שעות) |
 | עובדים | HR: תפקיד, הרשאות, שכר, ת.ז, 101, מסמכים |
-| מלאי | שני אזורים: בר / מטבח |
-| תפריט בר | עץ BOM |
-| תפריט מטבח | עץ BOM |
+| מלאי | שני אזורים: בר / מטבח + עלות ליחידה |
+| תפריט בר | עץ BOM + עלות |
+| תפריט מטבח | עץ BOM + עלות |
 | ספקים | כרטיס ספק + קישור למלאי חסר |
 | הגדרות | עסק + סניף פעיל |
 
@@ -68,13 +69,18 @@ Owner ──1── Organization (רשת/עסק)
 
 ### 3.2 מלאי
 
-פריט: שם, `department` bar|kitchen, קטגוריה, כמות, יחידה, minQuantity. מתחת לסף — סימון במסך המלאי בלבד.
+פריט: שם, `department` bar|kitchen, קטגוריה, כמות, יחידה, minQuantity, unitCost. מתחת לסף — סימון במסך המלאי בלבד.
 
 ### 3.3 מתכונים
 
-`recipes` + `recipe_lines`: רכיב = `inventoryItemId` או `subRecipeId` + כמות + יחידה. בלי פיצוץ מלאי אוטומטי.
+`recipes` + `recipe_lines`: רכיב = `inventoryItemId` או `subRecipeId` + כמות + יחידה. `cost` מחושב מהמלאי. בלי פיצוץ מלאי אוטומטי.
 
-### 3.4 ספקים
+### 3.4 כספים וסידור
+
+- `ledger_entries`: `revenue` | `expense` לפי תאריך בסניף. סיכום חודשי בבית.
+- `work_shifts`: עובד + התחלה/סיום. בעלים רואה שבוע ומוסיף משמרת.
+
+### 3.5 ספקים
 
 שם, טלפון, whatSupplies, scheduleNote, notes; שיוך לפריטי מלאי אופציונלי.
 
@@ -94,8 +100,10 @@ Owner ──1── Organization (רשת/עסק)
 - `PATCH /owner/organization`
 - CRUD `/owner/staff` + documents
 - CRUD `/owner/inventory`
-- CRUD `/owner/recipes`
+- CRUD `/owner/recipes` (כולל `cost`)
 - CRUD `/owner/suppliers`
+- `GET/POST /owner/finance/*`
+- `GET/POST/DELETE /owner/schedule`
 
 פלטפורמה (`requirePlatformAdmin`):
 
