@@ -643,8 +643,6 @@ export function seedDemoForOwnerPhone(phone: string): void {
   if (!owner) return;
   const org = db.select().from(organizations).where(eq(organizations.ownerId, owner.id)).get();
   if (!org) return;
-  const venue = db.select().from(venues).where(eq(venues.organizationId, org.id)).all()[0];
-  if (!venue) return;
 
   db.update(owners)
     .set({ name: "יובל מזרחי", updatedAt: nowIso() })
@@ -654,15 +652,65 @@ export function seedDemoForOwnerPhone(phone: string): void {
     .set({ name: "רשת ברים מזרחי · כשר בשרי", updatedAt: nowIso() })
     .where(eq(organizations.id, org.id))
     .run();
-  db.update(venues)
-    .set({
-      name: "בר רוטשילד · כשר בשרי",
-      kind: "bar",
-      address: "רוטשילד 45, תל אביב",
-      updatedAt: nowIso(),
-    })
-    .where(eq(venues.id, venue.id))
-    .run();
 
-  seedOwnerDemoVenue(venue.id);
+  const demoVenues: {
+    name: string;
+    kind: "bar" | "restaurant";
+    address: string;
+  }[] = [
+    { name: "בר רוטשילד · כשר בשרי", kind: "bar", address: "רוטשילד 45, תל אביב" },
+    { name: "מסעדת דיזנגוף · כשר בשרי", kind: "restaurant", address: "דיזנגוף 98, תל אביב" },
+    { name: "בר נמל יפו · כשר בשרי", kind: "bar", address: "רציף העלייה השנייה 10, יפו" },
+    { name: "בר הרצליה · כשר בשרי", kind: "bar", address: "המרינה, הרצליה פיתוח" },
+  ];
+
+  const existing = db.select().from(venues).where(eq(venues.organizationId, org.id)).all();
+  const byName = new Map(existing.map((v) => [v.name, v]));
+  const now = nowIso();
+  let orphanUsed = false;
+
+  for (const def of demoVenues) {
+    let venue = byName.get(def.name);
+
+    // Migrate the single pre-seed venue into the first branded branch.
+    if (!venue && !orphanUsed && existing.length === 1 && !byName.has(demoVenues[0].name)) {
+      venue = existing[0];
+      orphanUsed = true;
+    }
+
+    if (!venue) {
+      const id = newId();
+      db.insert(venues)
+        .values({
+          id,
+          name: def.name,
+          organizationId: org.id,
+          kind: def.kind,
+          address: def.address,
+          currency: "ILS",
+          timezone: "Asia/Jerusalem",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      venue = db.select().from(venues).where(eq(venues.id, id)).get()!;
+      byName.set(def.name, venue);
+    } else {
+      db.update(venues)
+        .set({
+          name: def.name,
+          kind: def.kind,
+          address: def.address,
+          updatedAt: now,
+        })
+        .where(eq(venues.id, venue.id))
+        .run();
+      venue = db.select().from(venues).where(eq(venues.id, venue.id)).get()!;
+      byName.set(def.name, venue);
+    }
+
+    seedOwnerDemoVenue(venue.id);
+  }
+
+  console.log(`Seeded ${demoVenues.length} demo venues for owner phone ${phone}`);
 }
