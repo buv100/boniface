@@ -131,9 +131,15 @@ export default function OwnerInventoryScreen() {
               }}
             >
               <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold", fontSize: 16 }}>{item.name}</Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}>{item.category}</Text>
+              <Text style={{ color: colors.foreground, fontSize: 13, marginTop: 6, fontFamily: "Inter_600SemiBold" }}>
+                {tr.owner.pricePerUnit}: {Number(item.unitCost ?? 0).toFixed(2)} ₪ / {item.unit}
+              </Text>
               <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
-                {item.quantity} {item.unit} · min {item.minQuantity}
-                {item.unitCost ? ` · ${item.unitCost} ₪` : ""}
+                {tr.owner.supplier}: {item.supplierName || tr.owner.noSupplier}
+              </Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
+                {tr.owner.quantity}: {item.quantity} {item.unit} · {tr.owner.minQty} {item.minQuantity}
                 {item.belowMin ? ` · ${tr.owner.belowMin}` : ""}
               </Text>
             </TouchableOpacity>

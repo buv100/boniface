@@ -59,7 +59,15 @@ export function OwnerMenuScreen({ department }: { department: InventoryDepartmen
   const lineLabel = (l: RecipeLine) => {
     const item = stock.find((s) => s.id === l.inventoryItemId);
     const rec = recipes.find((r) => r.id === l.subRecipeId);
-    return `${item?.name ?? rec?.name ?? "—"} · ${l.quantity} ${l.unit}`;
+    const name = l.ingredientName ?? item?.name ?? rec?.name ?? "—";
+    const unitCost = l.unitCost ?? item?.unitCost ?? 0;
+    const lineCost =
+      typeof l.lineCost === "number" ? l.lineCost : Math.round(unitCost * l.quantity * 100) / 100;
+    const supplier = l.supplierName ?? item?.supplierName;
+    const parts = [`${name} · ${l.quantity} ${l.unit}`, `${lineCost.toFixed(2)} ₪`];
+    if (supplier) parts.push(supplier);
+    if (l.category || item?.category) parts.push(l.category ?? item?.category ?? "");
+    return parts.filter(Boolean).join(" · ");
   };
 
   return (
@@ -103,8 +111,22 @@ export function OwnerMenuScreen({ department }: { department: InventoryDepartmen
             <Text style={{ color: colors.foreground, fontFamily: "Inter_700Bold", fontSize: 16 }}>{r.name}</Text>
             <Text style={{ color: colors.mutedForeground, marginTop: 4 }}>
               {r.kind} · {r.lines.length} {tr.owner.lines}
-              {typeof r.cost === "number" ? ` · ${tr.owner.recipeCost}: ${r.cost} ₪` : ""}
             </Text>
+            <Text style={{ color: colors.foreground, marginTop: 4, fontFamily: "Inter_600SemiBold" }}>
+              {tr.owner.recipeCost}: {Number(r.cost ?? 0).toFixed(2)} ₪
+            </Text>
+            {r.lines.slice(0, 4).map((l, i) => (
+              <Text key={`${r.id}-prev-${i}`} style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 2 }}>
+                · {l.ingredientName ?? "—"} · {l.quantity} {l.unit}
+                {typeof l.lineCost === "number" ? ` · ${l.lineCost.toFixed(2)} ₪` : ""}
+                {l.supplierName ? ` · ${l.supplierName}` : ""}
+              </Text>
+            ))}
+            {r.lines.length > 4 ? (
+              <Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 2 }}>
+                +{r.lines.length - 4}…
+              </Text>
+            ) : null}
           </TouchableOpacity>
         ))
       )}
@@ -158,6 +180,10 @@ export function OwnerMenuScreen({ department }: { department: InventoryDepartmen
                     }
                   >
                     <Text style={{ color: colors.foreground }}>{s.name}</Text>
+                    <Text style={{ color: colors.mutedForeground, fontSize: 10 }}>
+                      {Number(s.unitCost ?? 0).toFixed(2)} ₪/{s.unit}
+                      {s.supplierName ? ` · ${s.supplierName}` : ""}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>

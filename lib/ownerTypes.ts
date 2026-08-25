@@ -99,6 +99,7 @@ export interface InventoryItem {
   minQuantity: number;
   unitCost: number;
   supplierId: string | null;
+  supplierName?: string | null;
   belowMin: boolean;
   createdAt: string;
   updatedAt: string;
@@ -110,6 +111,11 @@ export interface RecipeLine {
   subRecipeId: string | null;
   quantity: number;
   unit: string;
+  ingredientName?: string | null;
+  unitCost?: number;
+  lineCost?: number;
+  supplierName?: string | null;
+  category?: string | null;
 }
 
 export interface Recipe {

@@ -71,7 +71,10 @@ function publicStaff(row: typeof staff.$inferSelect) {
   };
 }
 
-function publicInventory(row: typeof inventoryItems.$inferSelect) {
+function publicInventory(
+  row: typeof inventoryItems.$inferSelect,
+  supplierName: string | null = null
+) {
   return {
     id: row.id,
     venueId: row.venueId,
@@ -83,6 +86,7 @@ function publicInventory(row: typeof inventoryItems.$inferSelect) {
     minQuantity: row.minQuantity,
     unitCost: row.unitCost ?? 0,
     supplierId: row.supplierId,
+    supplierName,
     belowMin: row.quantity < row.minQuantity,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -107,8 +111,14 @@ function computeRecipeCost(recipeId: string, seen = new Set<string>()): number {
 
 function publicRecipe(
   row: typeof recipes.$inferSelect,
-  lines: (typeof recipeLines.$inferSelect)[]
+  lines: (typeof recipeLines.$inferSelect)[],
+  venueId: string
 ) {
+  const stock = db.select().from(inventoryItems).where(eq(inventoryItems.venueId, venueId)).all();
+  const stockById = new Map(stock.map((s) => [s.id, s]));
+  const supplierRows = db.select().from(suppliers).where(eq(suppliers.venueId, venueId)).all();
+  const supplierById = new Map(supplierRows.map((s) => [s.id, s.name]));
+
   return {
     id: row.id,
     venueId: row.venueId,
@@ -119,13 +129,23 @@ function publicRecipe(
     cost: computeRecipeCost(row.id),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    lines: lines.map((l) => ({
-      id: l.id,
-      inventoryItemId: l.inventoryItemId,
-      subRecipeId: l.subRecipeId,
-      quantity: l.quantity,
-      unit: l.unit,
-    })),
+    lines: lines.map((l) => {
+      const item = l.inventoryItemId ? stockById.get(l.inventoryItemId) : undefined;
+      const unitCost = item?.unitCost ?? 0;
+      const lineCost = Math.round(unitCost * l.quantity * 100) / 100;
+      return {
+        id: l.id,
+        inventoryItemId: l.inventoryItemId,
+        subRecipeId: l.subRecipeId,
+        quantity: l.quantity,
+        unit: l.unit,
+        ingredientName: item?.name ?? null,
+        unitCost,
+        lineCost,
+        supplierName: item?.supplierId ? supplierById.get(item.supplierId) ?? null : null,
+        category: item?.category ?? null,
+      };
+    }),
   };
 }
 
@@ -486,7 +506,8 @@ router.get("/inventory", (req, res) => {
   const department = typeof req.query.department === "string" ? req.query.department : null;
   const rows = db.select().from(inventoryItems).where(eq(inventoryItems.venueId, venueId)).all();
   const filtered = department ? rows.filter((r) => r.department === department) : rows;
-  res.json(filtered.map(publicInventory));
+  const names = supplierNameMap(venueId);
+  res.json(filtered.map((r) => publicInventory(r, resolveSupplierName(r.supplierId, names))));
 });
 
 router.post("/inventory", (req, res) => {
@@ -514,9 +535,9 @@ router.post("/inventory", (req, res) => {
       updatedAt: now,
     })
     .run();
-  res
-    .status(201)
-    .json(publicInventory(db.select().from(inventoryItems).where(eq(inventoryItems.id, id)).get()!));
+  const row = db.select().from(inventoryItems).where(eq(inventoryItems.id, id)).get()!;
+  const names = supplierNameMap(venueId);
+  res.status(201).json(publicInventory(row, resolveSupplierName(row.supplierId, names)));
 });
 
 router.patch("/inventory/:id", (req, res) => {
@@ -549,9 +570,9 @@ router.patch("/inventory/:id", (req, res) => {
     })
     .where(eq(inventoryItems.id, row.id))
     .run();
-  res.json(
-    publicInventory(db.select().from(inventoryItems).where(eq(inventoryItems.id, row.id)).get()!)
-  );
+  const updated = db.select().from(inventoryItems).where(eq(inventoryItems.id, row.id)).get()!;
+  const names = supplierNameMap(venueId);
+  res.json(publicInventory(updated, resolveSupplierName(updated.supplierId, names)));
 });
 
 router.delete("/inventory/:id", (req, res) => {
@@ -575,7 +596,26 @@ function recipeWithLines(recipeId: string) {
   const row = db.select().from(recipes).where(eq(recipes.id, recipeId)).get();
   if (!row) return null;
   const lines = db.select().from(recipeLines).where(eq(recipeLines.recipeId, recipeId)).all();
-  return publicRecipe(row, lines);
+  return publicRecipe(row, lines, row.venueId);
+}
+
+function resolveSupplierName(
+  supplierId: string | null,
+  byId: Map<string, string>
+): string | null {
+  if (!supplierId) return null;
+  return byId.get(supplierId) ?? null;
+}
+
+function supplierNameMap(venueId: string): Map<string, string> {
+  return new Map(
+    db
+      .select()
+      .from(suppliers)
+      .where(eq(suppliers.venueId, venueId))
+      .all()
+      .map((s) => [s.id, s.name])
+  );
 }
 
 router.get("/recipes", (req, res) => {
@@ -698,7 +738,10 @@ router.get("/suppliers", (req, res) => {
   const items = db.select().from(inventoryItems).where(eq(inventoryItems.venueId, venueId)).all();
   res.json(
     list.map((s) => {
-      const linked = items.filter((i) => i.supplierId === s.id).map(publicInventory);
+      const names = supplierNameMap(venueId);
+      const linked = items
+        .filter((i) => i.supplierId === s.id)
+        .map((i) => publicInventory(i, resolveSupplierName(i.supplierId, names)));
       return {
         ...publicSupplier(s),
         items: linked,
