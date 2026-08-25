@@ -98,12 +98,43 @@ export default function OwnerHomeScreen() {
           <Text style={[styles.kpiVal, { color: colors.foreground }]}>{money(summary?.expenses ?? 0)}</Text>
         </View>
         <View style={[styles.kpi, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.kpiLabel, { color: colors.mutedForeground }]}>{tr.owner.profit}</Text>
-          <Text style={[styles.kpiVal, { color: (summary?.profit ?? 0) >= 0 ? colors.primary : colors.destructive }]}>
-            {money(summary?.profit ?? 0)}
-          </Text>
+          <Text style={[styles.kpiLabel, { color: colors.mutedForeground }]}>{tr.owner.laborCost}</Text>
+          <Text style={[styles.kpiVal, { color: colors.destructive }]}>{money(summary?.laborCost ?? 0)}</Text>
         </View>
       </View>
+      <View style={[styles.profitCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={{ color: colors.mutedForeground }}>{tr.owner.profitAfterLabor}</Text>
+        <Text
+          style={{
+            color: (summary?.profitAfterLabor ?? 0) >= 0 ? colors.primary : colors.destructive,
+            fontFamily: "Inter_700Bold",
+            fontSize: 22,
+            marginTop: 4,
+          }}
+        >
+          {money(summary?.profitAfterLabor ?? 0)}
+        </Text>
+        <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 6 }}>
+          {tr.owner.revenue} {money(summary?.revenue ?? 0)} − {tr.owner.expenses} {money(summary?.expenses ?? 0)} −{" "}
+          {tr.owner.laborCost} {money(summary?.laborCost ?? 0)}
+        </Text>
+      </View>
+
+      {(summary?.staffLabor ?? []).length > 0 ? (
+        <View style={{ marginBottom: 12 }}>
+          <Text style={{ color: colors.foreground, fontFamily: "Inter_700Bold", marginBottom: 8 }}>
+            {tr.owner.staffLaborTitle}
+          </Text>
+          {(summary?.staffLabor ?? []).map((s) => (
+            <View key={s.staffId} style={[styles.entry, { borderColor: colors.border }]}>
+              <Text style={{ color: colors.foreground, flex: 1 }}>
+                {s.staffName} · {s.hours} {tr.owner.hoursShort}
+              </Text>
+              <Text style={{ color: colors.destructive, fontFamily: "Inter_600SemiBold" }}>{money(s.laborCost)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.actions}>
         <TouchableOpacity
@@ -208,6 +239,7 @@ const styles = StyleSheet.create({
   kpi: { flex: 1, borderWidth: 1, borderRadius: 14, padding: 10 },
   kpiLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 4 },
   kpiVal: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  profitCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
   actions: { flexDirection: "row", gap: 8, marginBottom: 10 },
   addFin: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
   addFinTxt: { fontFamily: "Inter_700Bold", color: "#111827" },

@@ -153,7 +153,18 @@ export interface FinanceSummary {
   month: string;
   revenue: number;
   expenses: number;
+  laborCost: number;
+  laborHours: number;
+  totalExpenses: number;
   profit: number;
+  profitAfterLabor: number;
+  staffLabor: {
+    staffId: string;
+    staffName: string;
+    hours: number;
+    laborCost: number;
+    payType: string;
+  }[];
   entries: LedgerEntry[];
 }
 
@@ -162,8 +173,19 @@ export interface WorkShift {
   venueId: string;
   staffId: string;
   staffName: string;
+  payType?: string | null;
+  payAmount?: number;
   startsAt: string;
   endsAt: string;
   note: string | null;
+  hours: number;
+  laborCost: number;
+  hourlyRate: number;
   createdAt: string;
+}
+
+export interface ScheduleWeek {
+  shifts: WorkShift[];
+  weekLaborCost: number;
+  weekHours: number;
 }

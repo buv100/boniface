@@ -9,7 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useLang } from "@/context/LangContext";
 import { useColors } from "@/hooks/useColors";
 import { apiCall } from "@/lib/api";
-import type { StaffMember, WorkShift } from "@/lib/ownerTypes";
+import type { ScheduleWeek, StaffMember, WorkShift } from "@/lib/ownerTypes";
 
 function startOfWeek(d: Date) {
   const x = new Date(d);
@@ -33,12 +33,35 @@ function hhmm(iso: string) {
   return t || iso;
 }
 
+function money(n: number) {
+  return `${Math.round(n).toLocaleString()} ₪`;
+}
+
+function previewCost(member: StaffMember | undefined, date: string, start: string, end: string) {
+  if (!member || !date || !start || !end) return null;
+  const startH = Number(start.slice(0, 2));
+  const endH = Number(end.slice(0, 2));
+  const endDate =
+    endH < startH || (endH === startH && end.slice(3) <= start.slice(3))
+      ? ymd(addDays(new Date(date + "T12:00:00"), 1))
+      : date;
+  const startsAt = `${date}T${start}`;
+  const endsAt = `${endDate}T${end}`;
+  const ms = new Date(endsAt).getTime() - new Date(startsAt).getTime();
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const hours = Math.round((ms / 3600000) * 100) / 100;
+  const rate = member.payType === "monthly" ? member.payAmount / 173 : member.payAmount;
+  return { hours, laborCost: Math.round(rate * hours * 100) / 100, rate: Math.round(rate * 100) / 100 };
+}
+
 export default function OwnerScheduleScreen() {
   const colors = useColors();
   const { tr, isRTL } = useLang();
   const { token } = useAuth();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [weekLaborCost, setWeekLaborCost] = useState(0);
+  const [weekHours, setWeekHours] = useState(0);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [open, setOpen] = useState(false);
   const [staffId, setStaffId] = useState("");
@@ -54,11 +77,15 @@ export default function OwnerScheduleScreen() {
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [s, st] = await Promise.all([
-      apiCall<WorkShift[]>(`/owner/schedule?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { token }),
+    const [week, st] = await Promise.all([
+      apiCall<ScheduleWeek>(`/owner/schedule?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+        token,
+      }),
       apiCall<StaffMember[]>("/owner/staff", { token }),
     ]);
-    setShifts(s);
+    setShifts(week.shifts ?? []);
+    setWeekLaborCost(week.weekLaborCost ?? 0);
+    setWeekHours(week.weekHours ?? 0);
     setStaffList(st);
   }, [token, from, to]);
 
@@ -70,12 +97,21 @@ export default function OwnerScheduleScreen() {
     if (!staffId && staffList[0]) setStaffId(staffList[0].id);
   }, [staffId, staffList]);
 
+  const selected = staffList.find((s) => s.id === staffId);
+  const preview = previewCost(selected, date, start, end);
+
   const save = async () => {
     if (!token || !staffId) {
       setError(tr.owner.emptyStaff);
       return;
     }
     setError("");
+    const startH = Number(start.slice(0, 2));
+    const endH = Number(end.slice(0, 2));
+    const endDate =
+      endH < startH || (endH === startH && end.slice(3) <= start.slice(3))
+        ? ymd(addDays(new Date(date + "T12:00:00"), 1))
+        : date;
     try {
       await apiCall("/owner/schedule", {
         method: "POST",
@@ -83,7 +119,7 @@ export default function OwnerScheduleScreen() {
         body: {
           staffId,
           startsAt: `${date}T${start}`,
-          endsAt: `${date}T${end}`,
+          endsAt: `${endDate}T${end}`,
           note: note.trim() || null,
         },
       });
@@ -110,6 +146,16 @@ export default function OwnerScheduleScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={[styles.weekSum, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={{ color: colors.mutedForeground }}>{tr.owner.weekLabor}</Text>
+        <Text style={{ color: colors.destructive, fontFamily: "Inter_700Bold", fontSize: 18 }}>
+          {money(weekLaborCost)}
+        </Text>
+        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+          {weekHours} {tr.owner.hoursShort} · {tr.owner.laborHitsExpenses}
+        </Text>
+      </View>
+
       <TouchableOpacity
         style={[styles.primary, { backgroundColor: colors.primary }]}
         onPress={() => {
@@ -124,20 +170,31 @@ export default function OwnerScheduleScreen() {
       {days.map((day, i) => {
         const key = ymd(day);
         const dayShifts = shifts.filter((s) => s.startsAt.slice(0, 10) === key);
+        const dayCost = dayShifts.reduce((s, sh) => s + (sh.laborCost || 0), 0);
         return (
           <View key={key} style={[styles.day, { borderColor: colors.border, backgroundColor: colors.card }]}>
-            <Text style={{ color: colors.primary, fontFamily: "Inter_700Bold" }}>
-              {tr.weekDays[i]} {day.getDate()}
-            </Text>
+            <View style={[styles.dayHead, { flexDirection: isRTL ? "row-reverse" : "row" }]}>
+              <Text style={{ color: colors.primary, fontFamily: "Inter_700Bold" }}>
+                {tr.weekDays[i]} {day.getDate()}
+              </Text>
+              {dayShifts.length > 0 ? (
+                <Text style={{ color: colors.destructive, fontFamily: "Inter_600SemiBold" }}>{money(dayCost)}</Text>
+              ) : null}
+            </View>
             {dayShifts.length === 0 ? (
               <Text style={{ color: colors.mutedForeground, marginTop: 6 }}>{tr.owner.noShifts}</Text>
             ) : (
               dayShifts.map((s) => (
                 <View key={s.id} style={styles.shiftRow}>
-                  <Text style={{ color: colors.foreground, flex: 1 }}>
-                    {s.staffName} · {hhmm(s.startsAt)}–{hhmm(s.endsAt)}
-                    {s.note ? ` · ${s.note}` : ""}
-                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.foreground }}>
+                      {s.staffName} · {hhmm(s.startsAt)}–{hhmm(s.endsAt)}
+                      {s.note ? ` · ${s.note}` : ""}
+                    </Text>
+                    <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
+                      {s.hours} {tr.owner.hoursShort} · {tr.owner.earnsShift}: {money(s.laborCost)}
+                    </Text>
+                  </View>
                   <TouchableOpacity
                     onPress={async () => {
                       if (!token) return;
@@ -194,6 +251,12 @@ export default function OwnerScheduleScreen() {
                 onChangeText={setEnd}
               />
             </View>
+            {preview ? (
+              <Text style={{ color: colors.primary, marginBottom: 10, fontFamily: "Inter_600SemiBold" }}>
+                {tr.owner.earnsShift}: {money(preview.laborCost)} ({preview.hours} {tr.owner.hoursShort} ×{" "}
+                {money(preview.rate)})
+              </Text>
+            ) : null}
             <TextInput
               style={[styles.input, { color: colors.foreground, borderColor: colors.border }]}
               placeholder={tr.owner.notes}
@@ -217,6 +280,7 @@ export default function OwnerScheduleScreen() {
 
 const styles = StyleSheet.create({
   weekNav: { alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  weekSum: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 12, gap: 4 },
   primary: {
     flexDirection: "row",
     justifyContent: "center",
@@ -227,6 +291,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   day: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 8 },
+  dayHead: { justifyContent: "space-between", alignItems: "center" },
   shiftRow: { flexDirection: "row", alignItems: "center", marginTop: 8, gap: 8 },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18 },

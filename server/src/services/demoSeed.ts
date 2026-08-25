@@ -295,7 +295,6 @@ export function seedOwnerDemoVenue(venueId: string): void {
     { offset: -4, kind: "revenue" as const, amount: 9800, note: "ערב חול" },
     { offset: -5, kind: "expense" as const, amount: 2650, note: "ירקות ובשר" },
     { offset: -6, kind: "revenue" as const, amount: 15200, note: "אירוע פרטי" },
-    { offset: -8, kind: "expense" as const, amount: 3100, note: "שכר שבועי חלקי" },
     { offset: -10, kind: "revenue" as const, amount: 11300, note: "סוף שבוע" },
     { offset: -12, kind: "expense" as const, amount: 890, note: "ניקיון + כביסה" },
     { offset: 0, kind: "revenue" as const, amount: 7600, note: "בוקר עד עכשיו" },

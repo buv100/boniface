@@ -26,6 +26,7 @@ import {
   requireOwner,
   requirePaidOrg,
 } from "../middleware/auth";
+import { shiftLaborCost } from "../services/laborCost";
 
 const router = Router();
 router.use(requireOwner);
@@ -840,11 +841,67 @@ router.get("/finance/summary", (req, res) => {
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
   const revenue = rows.filter((r) => r.kind === "revenue").reduce((s, r) => s + r.amount, 0);
   const expenses = rows.filter((r) => r.kind === "expense").reduce((s, r) => s + r.amount, 0);
+
+  const staffRows = db.select().from(staff).where(eq(staff.venueId, venueId)).all();
+  const staffById = new Map(staffRows.map((s) => [s.id, s]));
+  const monthShifts = db
+    .select()
+    .from(workShifts)
+    .where(eq(workShifts.venueId, venueId))
+    .all()
+    .filter((s) => s.startsAt.slice(0, 10) >= bounds.start && s.startsAt.slice(0, 10) <= bounds.end);
+
+  const byStaffMap = new Map<
+    string,
+    { staffId: string; staffName: string; hours: number; laborCost: number; payType: string }
+  >();
+  let laborCost = 0;
+  let laborHours = 0;
+  for (const sh of monthShifts) {
+    const member = staffById.get(sh.staffId);
+    if (!member) continue;
+    const calc = shiftLaborCost({
+      payType: member.payType,
+      payAmount: member.payAmount,
+      startsAt: sh.startsAt,
+      endsAt: sh.endsAt,
+    });
+    laborCost += calc.laborCost;
+    laborHours += calc.hours;
+    const prev = byStaffMap.get(member.id) ?? {
+      staffId: member.id,
+      staffName: member.name,
+      hours: 0,
+      laborCost: 0,
+      payType: member.payType,
+    };
+    prev.hours += calc.hours;
+    prev.laborCost += calc.laborCost;
+    byStaffMap.set(member.id, prev);
+  }
+  laborCost = Math.round(laborCost * 100) / 100;
+  laborHours = Math.round(laborHours * 100) / 100;
+  const staffLabor = [...byStaffMap.values()]
+    .map((s) => ({
+      ...s,
+      hours: Math.round(s.hours * 100) / 100,
+      laborCost: Math.round(s.laborCost * 100) / 100,
+    }))
+    .sort((a, b) => b.laborCost - a.laborCost);
+
+  const totalExpenses = Math.round((expenses + laborCost) * 100) / 100;
+  const profitAfterLabor = Math.round((revenue - totalExpenses) * 100) / 100;
+
   res.json({
     month,
     revenue: Math.round(revenue * 100) / 100,
     expenses: Math.round(expenses * 100) / 100,
+    laborCost,
+    laborHours,
+    totalExpenses,
     profit: Math.round((revenue - expenses) * 100) / 100,
+    profitAfterLabor,
+    staffLabor,
     entries: rows.map(publicLedger),
   });
 });
@@ -888,15 +945,31 @@ router.delete("/finance/entries/:id", (req, res) => {
 
 // —— Schedule ——
 
-function publicShift(row: typeof workShifts.$inferSelect, staffName: string) {
+function publicShift(
+  row: typeof workShifts.$inferSelect,
+  member: { name: string; payType: string; payAmount: number } | null
+) {
+  const calc = member
+    ? shiftLaborCost({
+        payType: member.payType,
+        payAmount: member.payAmount,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+      })
+    : { hours: 0, laborCost: 0, hourlyRate: 0 };
   return {
     id: row.id,
     venueId: row.venueId,
     staffId: row.staffId,
-    staffName,
+    staffName: member?.name ?? "",
+    payType: member?.payType ?? null,
+    payAmount: member?.payAmount ?? 0,
     startsAt: row.startsAt,
     endsAt: row.endsAt,
     note: row.note,
+    hours: calc.hours,
+    laborCost: calc.laborCost,
+    hourlyRate: calc.hourlyRate,
     createdAt: row.createdAt,
   };
 }
@@ -913,7 +986,7 @@ router.get("/schedule", (req, res) => {
   const from = typeof req.query.from === "string" ? req.query.from : "";
   const to = typeof req.query.to === "string" ? req.query.to : "";
   const staffRows = db.select().from(staff).where(eq(staff.venueId, venueId)).all();
-  const names = new Map(staffRows.map((s) => [s.id, s.name]));
+  const byId = new Map(staffRows.map((s) => [s.id, s]));
   const rows = db
     .select()
     .from(workShifts)
@@ -925,7 +998,10 @@ router.get("/schedule", (req, res) => {
       return true;
     })
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  res.json(rows.map((r) => publicShift(r, names.get(r.staffId) ?? "")));
+  const shifts = rows.map((r) => publicShift(r, byId.get(r.staffId) ?? null));
+  const weekLaborCost = Math.round(shifts.reduce((s, sh) => s + sh.laborCost, 0) * 100) / 100;
+  const weekHours = Math.round(shifts.reduce((s, sh) => s + sh.hours, 0) * 100) / 100;
+  res.json({ shifts, weekLaborCost, weekHours });
 });
 
 router.post("/schedule", (req, res) => {
@@ -960,7 +1036,9 @@ router.post("/schedule", (req, res) => {
       createdAt: nowIso(),
     })
     .run();
-  res.status(201).json(publicShift(db.select().from(workShifts).where(eq(workShifts.id, id)).get()!, member.name));
+  res
+    .status(201)
+    .json(publicShift(db.select().from(workShifts).where(eq(workShifts.id, id)).get()!, member));
 });
 
 router.delete("/schedule/:id", (req, res) => {
