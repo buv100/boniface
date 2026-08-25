@@ -2,13 +2,16 @@
 
 Bar management app (Expo / React Native) with a local Express + SQLite API.
 
-## Share with friends (no install)
+## Share with friends / investors (no install)
 
-Open **https://boniface.expo.app** — it talks to the cloud API at `https://boniface-api.onrender.com`.
+Open **https://boniface.expo.app**
 
-Demo login: phone `0501234567` · PIN `2020`.
+1. Tap **כניסה** (phone + PIN are prefilled for the demo).
+2. You land on **בר רוטשילד** — monthly P&L, then tiles for schedule / staff / inventory / menus / suppliers.
 
-The first tap after idle can take ~30–60s (Render free tier). Data on the free API can reset after a redeploy.
+Demo login: `0501234567` · `2020`
+
+First load after idle can take ~30–60s (Render free tier). Redeploy may wipe SQLite; the API re-seeds the demo venue on boot.
 
 ## Run mobile
 

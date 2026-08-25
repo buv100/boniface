@@ -69,7 +69,7 @@ function RoleGate({ children }: { children: React.ReactNode }) {
         return;
       }
       if (ownerAccessActive && inOwner && second === "blocked") {
-        router.replace("/owner/hub" as any);
+        router.replace("/owner" as any);
         return;
       }
       if (!inOwner && !legal.has(root) && root !== "account") {

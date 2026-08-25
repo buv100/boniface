@@ -22,17 +22,21 @@ export default function AccountScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tr, isRTL } = useLang();
-  const { isLoggedIn, isOwner, ownerAccessActive, ownerLogin, logout } = useAuth();
+  const { isLoggedIn, isOwner, ownerAccessActive, ownerLogin, logout, venues } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [phone, setPhone] = useState("");
-  const [pin, setPin] = useState("");
+  const [phone, setPhone] = useState("0501234567");
+  const [pin, setPin] = useState("2020");
 
   useEffect(() => {
     if (!isLoggedIn || !isOwner) return;
-    router.replace((ownerAccessActive ? "/owner/hub" : "/owner/blocked") as any);
-  }, [isLoggedIn, isOwner, ownerAccessActive]);
+    if (!ownerAccessActive) {
+      router.replace("/owner/blocked" as any);
+      return;
+    }
+    router.replace((venues.length > 1 ? "/owner/hub" : "/owner") as any);
+  }, [isLoggedIn, isOwner, ownerAccessActive, venues.length]);
 
   const field = (value: string, set: (t: string) => void, placeholder: string, extra?: object) => (
     <TextInput

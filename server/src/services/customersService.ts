@@ -219,6 +219,8 @@ export function updateOrgSubscription(
   return customerDetail(organizationId);
 }
 
+import { seedDemoForOwnerPhone } from "./demoSeed";
+
 /** Local/dev login so `/account` works without the admin panel. */
 export async function ensureDevTestOwner(): Promise<void> {
   const phone = normalizePhone(process.env.DEV_LOGIN_PHONE?.trim() || "0501234567");
@@ -239,21 +241,25 @@ export async function ensureDevTestOwner(): Promise<void> {
       updateOrgSubscription(org.id, {
         status: "active",
         expiresAt: paidUntilStr,
-        notes: "בדיקה מקומית",
+        notes: "דמו למשקיעים",
       });
     }
+    seedDemoForOwnerPhone(phone);
     return;
   }
 
   await createCustomer({
-    ownerName: "בדיקה",
+    ownerName: "יובל מזרחי",
     phone,
-    email: "test@boniface.local",
+    email: "demo@boniface.local",
     pin,
-    organizationName: "עסק בדיקה",
-    venueName: "סניף בדיקה",
+    organizationName: "רשת ברים מזרחי",
+    venueName: "בר רוטשילד",
     venueKind: "bar",
+    businessAddress: "רוטשילד 45, תל אביב",
+    venueAddress: "רוטשילד 45, תל אביב",
     paidUntil: paidUntilStr,
-    notes: "בדיקה מקומית",
+    notes: "דמו למשקיעים",
   });
+  seedDemoForOwnerPhone(phone);
 }

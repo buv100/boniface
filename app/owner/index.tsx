@@ -70,6 +70,7 @@ export default function OwnerHomeScreen() {
     { key: "stock", icon: "layers" as const, label: tr.owner.tileStock, href: "/owner/inventory" },
     { key: "bar", icon: "coffee" as const, label: tr.owner.tileBarMenu, href: "/owner/bar-menu" },
     { key: "kitchen", icon: "box" as const, label: tr.owner.tileKitchenMenu, href: "/owner/kitchen-menu" },
+    { key: "sup", icon: "truck" as const, label: tr.owner.tileSuppliers, href: "/owner/suppliers" },
     { key: "set", icon: "settings" as const, label: tr.owner.tileSettings, href: "/owner/settings" },
   ];
 
@@ -125,18 +126,22 @@ export default function OwnerHomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {(summary?.entries ?? []).slice(0, 5).map((e) => (
-        <View key={e.id} style={[styles.entry, { borderColor: colors.border }]}>
-          <Text style={{ color: colors.foreground, flex: 1 }}>
-            {e.date} · {e.kind === "revenue" ? tr.owner.revenue : tr.owner.expenses}
-            {e.note ? ` · ${e.note}` : ""}
-          </Text>
-          <Text style={{ color: e.kind === "revenue" ? colors.primary : colors.destructive, fontFamily: "Inter_600SemiBold" }}>
-            {e.kind === "expense" ? "−" : "+"}
-            {money(e.amount)}
-          </Text>
-        </View>
-      ))}
+      {(summary?.entries ?? []).length === 0 ? (
+        <Text style={{ color: colors.mutedForeground, marginBottom: 8 }}>{tr.owner.noFinance}</Text>
+      ) : (
+        (summary?.entries ?? []).slice(0, 5).map((e) => (
+          <View key={e.id} style={[styles.entry, { borderColor: colors.border }]}>
+            <Text style={{ color: colors.foreground, flex: 1 }}>
+              {e.date} · {e.kind === "revenue" ? tr.owner.revenue : tr.owner.expenses}
+              {e.note ? ` · ${e.note}` : ""}
+            </Text>
+            <Text style={{ color: e.kind === "revenue" ? colors.primary : colors.destructive, fontFamily: "Inter_600SemiBold" }}>
+              {e.kind === "expense" ? "−" : "+"}
+              {money(e.amount)}
+            </Text>
+          </View>
+        ))
+      )}
 
       <View style={styles.grid}>
         {tiles.map((t) => (
