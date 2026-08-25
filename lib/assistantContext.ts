@@ -8,7 +8,7 @@ import type { AuthEmployee, AuthManager, AuthVenue } from "@/context/AuthContext
 export interface AssistantLiveContext {
   asOf: string;
   account: {
-    role: "manager" | "employee" | "guest";
+    role: "manager" | "employee" | "owner" | "guest";
     managerName?: string;
     employeeName?: string;
     venueName?: string;
@@ -81,7 +81,7 @@ type SeedTr = {
 };
 
 export function buildAssistantLiveContext(opts: {
-  role: "manager" | "employee" | "guest";
+  role: "manager" | "employee" | "owner" | "guest";
   manager?: AuthManager | null;
   employee?: AuthEmployee | null;
   venue?: AuthVenue | null;
