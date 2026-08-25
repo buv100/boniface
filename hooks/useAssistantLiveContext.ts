@@ -22,7 +22,13 @@ export function useAssistantLiveContext(): AssistantLiveContext {
   } = useBoniface();
   const { tr } = useLang();
 
-  const role = !auth.isLoggedIn ? "guest" : auth.isEmployee ? "employee" : "manager";
+  const role = !auth.isLoggedIn
+    ? "guest"
+    : auth.isOwner
+      ? "owner"
+      : auth.isEmployee
+        ? "employee"
+        : "manager";
 
   return useMemo(() => {
     const full = buildAssistantLiveContext({

@@ -38,8 +38,9 @@ function RoleGate({ children }: { children: React.ReactNode }) {
     const inEmployee = root === "employee";
     const inOwner = root === "owner";
     const inAdmin = root === "admin";
-    const legal = new Set(["assistant", "privacy", "terms"]);
-    const guestOk = legal.has(root) || root === "account" || (inAdmin && second === "login");
+    const publicLegal = new Set(["privacy", "terms"]);
+    const appLegal = new Set(["privacy", "terms", "assistant"]);
+    const guestOk = publicLegal.has(root) || root === "account" || (inAdmin && second === "login");
 
     if (!isLoggedIn) {
       if (inAdmin && second !== "login") {
@@ -53,7 +54,7 @@ function RoleGate({ children }: { children: React.ReactNode }) {
     }
 
     if (isPlatformAdmin) {
-      if (!inAdmin && !legal.has(root)) {
+      if (!inAdmin && !publicLegal.has(root)) {
         router.replace("/admin" as any);
       }
       return;
@@ -72,13 +73,13 @@ function RoleGate({ children }: { children: React.ReactNode }) {
         router.replace("/owner" as any);
         return;
       }
-      if (!inOwner && !legal.has(root) && root !== "account") {
+      if (!inOwner && !appLegal.has(root) && root !== "account") {
         router.replace("/owner" as any);
       }
       return;
     }
 
-    if (isLoggedIn && isEmployee && !inEmployee && !legal.has(root) && root !== "account") {
+    if (isLoggedIn && isEmployee && !inEmployee && !appLegal.has(root) && root !== "account") {
       router.replace("/employee" as any);
     } else if (isLoggedIn && isManager && (inEmployee || inOwner || inAdmin)) {
       router.replace("/");

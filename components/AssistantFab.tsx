@@ -43,7 +43,7 @@ export function AssistantFab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tr, isRTL } = useLang();
-  const { isOwner, isPlatformAdmin } = useAuth();
+  const { isLoggedIn, isOwner, isPlatformAdmin } = useAuth();
   const { open, openChat, closeChat } = useAssistantChat();
   const liveContext = useAssistantLiveContext();
   const pathname = usePathname();
@@ -55,7 +55,17 @@ export function AssistantFab() {
   const listRef = useRef<FlatList>(null);
 
   const onFullAssistant = pathname === "/assistant" || pathname?.endsWith("/assistant");
-  const tabClearance = Platform.OS === "web" ? 96 : 72 + insets.bottom;
+  const onAuthScreen =
+    pathname === "/account" ||
+    pathname?.endsWith("/account") ||
+    pathname === "/admin/login" ||
+    (pathname?.includes("/admin/") && pathname?.endsWith("/login"));
+  const inOwnerApp = pathname === "/owner" || pathname?.startsWith("/owner/");
+  const tabClearance = inOwnerApp
+    ? 24 + insets.bottom
+    : Platform.OS === "web"
+      ? 96
+      : 72 + insets.bottom;
   const panelHeight = Math.min(Math.max(winH * 0.58, 360), 520);
 
   useEffect(() => {
@@ -143,13 +153,14 @@ export function AssistantFab() {
   // Keep overlay mounted while open (survives navigation). Hide chrome on full-screen assistant when closed.
   if (onFullAssistant && !open) return null;
 
+  // Chat is in-app only — not on login / admin login / guest.
+  if (!isLoggedIn || isPlatformAdmin || onAuthScreen) return null;
+
   const showFab = !open;
 
   const sideStyle = isRTL
     ? { left: 16 }
     : { right: 16 };
-
-  if (isOwner || isPlatformAdmin) return null;
 
   return (
     <>

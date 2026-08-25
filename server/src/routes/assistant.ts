@@ -121,7 +121,19 @@ Allowed routes:
 /employee/profile — Employee profile
 /assistant — Full-screen chat (rare)
 
-Stock/inventory/מלאי/סטופ/עלות משקה → always /bar (not /more).
+OWNER APP (role=owner — multi-venue chain):
+/owner — Owner home: revenue, expenses, profit, labor, tiles
+/owner/hub — Pick venue / branch (בחירת סניף)
+/owner/staff — Staff & pay
+/owner/inventory — Stock with unit price + supplier (מלאי)
+/owner/bar-menu — Bar recipes / BOM cost
+/owner/kitchen-menu — Kitchen recipes (kosher meat/pareve)
+/owner/suppliers — Suppliers
+/owner/schedule — Work schedule + per-shift pay
+/owner/settings — Venue settings
+
+Stock/inventory/מלאי/סטופ/עלות משקה → manager: /bar ; owner: /owner/inventory.
+Owner recipes/תפריט → /owner/bar-menu or /owner/kitchen-menu.
 
 Keep answers actionable. Use bullet steps for "how to". For calculations show brief math.`;
 

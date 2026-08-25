@@ -19,6 +19,15 @@ export const ASSISTANT_ROUTES = [
   "/employee/tips",
   "/employee/profile",
   "/assistant",
+  "/owner",
+  "/owner/hub",
+  "/owner/staff",
+  "/owner/inventory",
+  "/owner/bar-menu",
+  "/owner/kitchen-menu",
+  "/owner/suppliers",
+  "/owner/schedule",
+  "/owner/settings",
 ] as const;
 
 export type AssistantRoute = (typeof ASSISTANT_ROUTES)[number];
